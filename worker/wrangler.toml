@@ -1,0 +1,14 @@
+name = "mrf-audit-tool"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Origins allowed to call the Worker. Add the GitHub Pages URL the app is served
+# from, plus any local address you test against.
+[vars]
+ALLOWED_ORIGINS = "https://mrfpaint.github.io,http://127.0.0.1:8791"
+
+# Secrets are NOT set here — they would end up in git. Set them with:
+#   wrangler secret put TEAM_PASSWORD
+#   wrangler secret put TOKEN_SECRET
+#   wrangler secret put BRIDGE_TOKEN
+#   wrangler secret put SHEET_ENDPOINT

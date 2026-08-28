@@ -1,0 +1,153 @@
+# Internal Audit Report Builder
+
+Internal auditors record observations here and export the draft report as a PDF in
+the format MRF already issues — the same layout as `Admin audit.pdf`.
+
+**Setup:** see [SETUP.md](SETUP.md)
+**Try it now:** open `index.html` in Chrome or Edge. With no backend configured it
+runs in **local mode** (audits saved in that browser only), so you can fill in an
+observation and export a PDF without deploying anything.
+
+## What it does
+
+One screen per job:
+
+| Screen | Purpose |
+|---|---|
+| Audits | every audit, searchable by code / location / area, each with a Draft or Final badge |
+| Audit workspace | the observations in one audit — reorder, add, delete, preview, export |
+| Observation editor | all report fields, laid out in the same order they print |
+| Report preview | the finished report at true A4 width, then **Export PDF** |
+
+An audit is identified by **code + location + area**, which is also what the report
+footer is built from — `58` + `Nalagarh` + `Administration Control` prints as
+`Draft Report - 58_Nalagarh_Administration Control`. Switching the audit's status
+to Final changes the footer to `Final Report - …`.
+
+## The observation fields
+
+The editor mirrors the printed page top to bottom, so what you fill in is where it
+lands:
+
+- **Heading & risk** — title, Repeat Yes/No, Value (INR), Risk Rating
+  **C**ritical / **H**igh / **M**edium / **L**ow, System Improvement Yes/No
+- **Background** — rich text
+- **Observation(s)** — rich text, usually a numbered finding list plus data tables
+- **Root Cause(s)** — text, plus ticks for People / Process / Technology
+- **Business Impact(s)** — text, plus ticks for Operational / Financial / Compliance / Reputational
+- **Recommendation(s)** — text, plus ticks for People / Process / Technology
+- **Management Response(s)** — rich text
+- **Implementation** — one or more rows of Owner / Action Plan / Timeline
+- **Upload File** — the filenames of your supporting evidence
+
+Every rich-text box supports **bold, italic, underline, bullet lists, numbered
+lists, indent levels and data tables**. `+ Table` asks for the size, then a
+contextual bar lets you add or remove rows and columns and toggle the header row.
+Pasting from Excel or Word keeps the table and the bold, and drops the styling
+noise.
+
+Bands with nothing in them are skipped when printing, so a half-finished
+observation never prints a stranded gold header.
+
+Values use Indian digit grouping — `169000` prints as `1,69,000` — and
+timelines print as `March 31, 2024`.
+
+## Exporting the PDF
+
+**Export PDF** opens the browser's print dialog. Choose **Save as PDF**, and:
+
+- **Headers and footers: off** — otherwise Chrome adds its own date and URL
+- **Margins: Default** — the page margins are set by the stylesheet
+- **Background graphics** — either way; the stylesheet forces the gold bands
+  and the red risk box to print with `print-color-adjust: exact`
+
+Use **Chrome or Edge**. The repeating page footer relies on Blink's handling of a
+repeated table footer; Firefox and Safari will produce a usable PDF but the footer
+placement is not guaranteed.
+
+## How faithful is the output?
+
+The print stylesheet is built from measurements taken out of `Admin audit.pdf`
+(itself a wkhtmltopdf export), and the result was checked by printing through
+headless Chrome and comparing coordinates against the original:
+
+| Element | Original | This tool |
+|---|---|---|
+| Page | A4, 595 × 842 pt | 595 × 842 pt |
+| Observation title | x 36.9, y 32.4, 17.3 pt bold | x 36.9, y 32.3, 17.3 pt bold |
+| Gold rule | x 34.5, y 72.7 | x 34.5, y 72.8 |
+| Header band | x 34.5, y 79.3, h 32.3 | x 34.5, y 79.5, h 32.2 |
+| Risk boxes C/H/M/L | x 483.2 / 503.5 / 523.8 / 545.9 | x 483.8 / 503.9 / 524.0 / 545.2 |
+| Left column | x 36.3, w 400.3 | x 36.0, w 400.5 |
+| Right column (matrices) | x 440.2, w 119.5 | x 440.2, w 119.2 |
+| Implementation table | cols 77.7 / 360.3 / 77.1 | cols 78.0 / 361.5 / 77.2 |
+| Body paragraph indent | x 37.5 | x 37.5 |
+| List text indent | x 61.4 | x 61.4 |
+| Footer | x 28.7, y 814.5, 13.5 pt | x 34.5, y 797.0, 13.5 pt |
+
+The header band reads **Value: INR n** (the source said "Value at Risk"), and the
+first footer segment is the audit's free-text **Location**.
+
+Everything lands within about a point, except the footer, which sits ~17 pt higher
+and 6 pt further right. That was a deliberate trade: the only footer offset Blink
+repeats on *every* page is one that stays inside the content box, and any offset
+that reached the original's exact line either overlapped the last lines of body
+text or silently vanished from page one.
+
+Two other intentional differences from the source: the section labels are spelled
+correctly here (the original reads "Management Respnses(s)" and "Implemetation"),
+and rows of a tick matrix are a uniform height rather than taller only where a
+tick appears.
+
+## Known gap: charts and images
+
+Page 1 of `Admin audit.pdf` carries a bar chart of telephone expenses. This tool
+takes **rich text and tables, not images**, so a chart like that cannot be
+reproduced — the underlying numbers would go in as a data table instead. Adding
+image support (paste or upload into any section) is a contained change if you want
+it.
+
+## How it fits together
+
+`index.html` is public, so it holds no data and no credentials:
+
+```
+browser --(team password)--> Cloudflare Worker --(bridge token)--> Apps Script --> Google Sheet
+```
+
+The Worker checks the password, issues a signed 8-hour token, and is the only
+thing that knows how to reach the sheet. The sheet itself is never link-shared.
+Until you set `CFG.API` in `index.html`, none of that is used and the app keeps
+everything in the browser.
+
+```
+index.html            the whole app — no build step, no framework
+worker/worker.js      Cloudflare Worker: password -> token, then proxy to Apps Script
+worker/wrangler.toml  Worker config (secrets are set via `wrangler secret put`)
+apps-script/Code.gs   reads and writes the Google Sheet
+```
+
+`Admin audit.pdf` — the report this layout was measured against — is **not in
+this repo**. It is a real Nalagarh audit containing employee names, vendors and
+findings, so it is git-ignored and kept on local disks. The fidelity table above
+records everything about the format that the code depends on.
+
+`.gitignore` blocks `*.pdf` outright: this repo is public and the tool's whole
+purpose is producing audit PDFs, so an exported report must never be committed
+by accident.
+
+## The sheet
+
+Three tabs, created automatically on first use:
+
+- **Audits** — one row per audit
+- **Observations** — one row per observation; the rich-text sections are stored as
+  HTML in single cells, tick selections as pipe-separated lists, implementation
+  rows as JSON
+- **Config** — `key | value` pairs holding the Audit area and Implementation
+  owner picklists, one value per line. Editable in-app under
+  **Settings**, or directly in the sheet.
+
+Because section bodies are HTML that round-trips through the sheet, everything is
+sanitised on the way in: only the tags the report uses survive, and all
+attributes are stripped except table `colspan`/`rowspan`.

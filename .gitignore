@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Audit reports are confidential — they name employees, vendors, invoice
+# numbers and control failures. `Admin audit.pdf` is the layout reference this
+# tool was built against and stays on local disks only.
+#
+# The blanket *.pdf rule is deliberate: this repo is public, and the whole
+# point of the tool is producing audit PDFs, so an exported report must never
+# be committed by accident. Use `git add -f` if you ever genuinely need one.
+# ---------------------------------------------------------------------------
+*.pdf
+Admin audit.pdf
+
+# Working files that sometimes land next to a report
+*.xlsx
+*.xlsb
+*.xls
+*.docx
+*.csv
+~$*
+
+# Wrangler / Node
+.wrangler/
+node_modules/
+.dev.vars
+.env
+*.log
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini

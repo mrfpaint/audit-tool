@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Internal Audit Report Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   THEME VARIABLES — the whole palette lives here as CSS custom properties so
+   every rule below references var(--x) instead of repeating hex codes.
+   --gold / --risk-red are the two colours lifted straight out of the sample
+   PDF (#FFD700 gold bands, #FF0000 selected risk box) and MUST NOT change,
+   because the printed report has to match reports already issued.
+   ========================================================================== */
+:root{
+  --gold:#FFD700; --risk-red:#FF0000;                    /* report colours — locked to the sample PDF */
+  --red:#C8102E; --red-dark:#9e0c24; --red-light:#f5e6e9; /* MRF brand red, used for app chrome only */
+  --dark:#1a1a2e; --dark2:#16213e;                        /* near-blacks for the header gradient */
+  --gray:#6b7280; --gray-light:#f3f4f6; --white:#fff;     /* neutral text / background greys */
+  --success:#10b981; --warning:#f59e0b; --border:#e5e7eb; /* status colours + default 1px border */
+  --shadow:0 2px 12px rgba(0,0,0,.08);                    /* soft card shadow reused everywhere */
+}
+/* CSS RESET — kill default margins and make width include padding+border. */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-height:100vh;font-size:14px;}
+
+/* SCREEN SWITCHER — this app fakes multi-page navigation inside one HTML file:
+   every top-level "screen" is hidden until JS adds .active to it. */
+.screen{display:none;} .screen.active{display:block;}
+
+/* --------------------------------------------------------------------------
+   HEADER — sticky bar shown on every screen once signed in.
+   -------------------------------------------------------------------------- */
+.header{background:linear-gradient(135deg,var(--dark),var(--dark2));color:#fff;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3);}
+.hb{display:flex;align-items:center;gap:10px;}
+.hl{width:32px;height:32px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:#fff;}
+.ht{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:.5px;}
+.ht span{color:var(--gold);}
+.hs{font-size:10px;color:rgba(255,255,255,.5);letter-spacing:1px;text-transform:uppercase;}
+.hr{display:flex;align-items:center;gap:10px;}
+.ubadge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:4px 12px;font-size:12px;color:rgba(255,255,255,.85);}
+.bso{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;}
+.bso:hover{background:rgba(255,255,255,.08);}
+
+/* --------------------------------------------------------------------------
+   AUTH — the sign-in screen (single shared team password, same model as the
+   Agreement Dashboard: the password buys a signed 8-hour token).
+   -------------------------------------------------------------------------- */
+.auth-wrap{min-height:100vh;background:linear-gradient(135deg,var(--dark),#0f3460,var(--dark2));display:flex;align-items:center;justify-content:center;padding:24px 16px;}
+.auth-card{background:#fff;border-radius:20px;padding:36px 28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.auth-logo-wrap{text-align:center;margin-bottom:24px;}
+.auth-logo{width:56px;height:56px;background:linear-gradient(135deg,var(--red),var(--red-dark));border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;color:#fff;margin-bottom:12px;box-shadow:0 8px 20px rgba(200,16,46,.3);}
+.auth-brand{font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--dark);}
+.auth-brand span{color:var(--red);}
+.auth-tagline{font-size:12px;color:var(--gray);margin-top:4px;}
+.auth-title{font-size:18px;font-weight:600;color:var(--dark);margin-bottom:6px;}
+.auth-desc{font-size:13px;color:var(--gray);margin-bottom:22px;line-height:1.5;}
+
+/* --------------------------------------------------------------------------
+   FORMS — shared styling for every input, select and button in the app.
+   -------------------------------------------------------------------------- */
+.form-group{margin-bottom:16px;}
+.form-label{display:block;font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;letter-spacing:.3px;text-transform:uppercase;}
+.form-input,.form-select,.form-area{width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--dark);background:#fff;outline:none;-webkit-appearance:none;transition:border-color .2s;}
+.form-area{min-height:70px;resize:vertical;line-height:1.5;}
+.form-input:focus,.form-select:focus,.form-area:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(200,16,46,.1);}
+.form-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;}
+.btn-primary{width:100%;padding:12px;background:linear-gradient(135deg,var(--red),var(--red-dark));color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .2s;box-shadow:0 4px 12px rgba(200,16,46,.3);}
+.btn-primary:hover{transform:translateY(-1px);}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+/* Small inline buttons used in toolbars and row actions. */
+.btn{border:1.5px solid var(--border);background:#fff;color:#374151;padding:7px 13px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;}
+.btn:hover{border-color:var(--gray);background:var(--gray-light);}
+.btn.pri{background:var(--red);border-color:var(--red);color:#fff;} .btn.pri:hover{background:var(--red-dark);}
+.btn.gold{background:var(--gold);border-color:#d9b800;color:#111;font-weight:600;} .btn.gold:hover{background:#e6c200;}
+.btn.dgr{color:#b91c1c;border-color:#fecaca;} .btn.dgr:hover{background:#fef2f2;border-color:#f87171;}
+.btn.sm{padding:4px 9px;font-size:12px;border-radius:6px;}
+.err{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:9px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;}
+.hint{font-size:11.5px;color:var(--gray);margin-top:5px;line-height:1.45;}
+
+/* --------------------------------------------------------------------------
+   LAYOUT — page shell, toolbars and cards used by the list/editor screens.
+   -------------------------------------------------------------------------- */
+.wrap{max-width:1180px;margin:0 auto;padding:22px 16px 60px;}
+.pagehead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.pagetitle{font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:var(--dark);line-height:1.15;}
+.pagesub{font-size:13px;color:var(--gray);margin-top:3px;}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:18px;margin-bottom:16px;}
+.empty{background:#fff;border:1px dashed #d1d5db;border-radius:14px;padding:44px 20px;text-align:center;color:var(--gray);}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;}
+
+/* Audit list rows. */
+.arow{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;transition:all .15s;}
+.arow:hover{border-color:var(--red);transform:translateX(2px);}
+.acode{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:#fff;background:var(--dark);border-radius:8px;min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;padding:0 8px;}
+.amain{flex:1;min-width:0;}
+.aname{font-weight:600;font-size:14.5px;color:var(--dark);}
+.ameta{font-size:12px;color:var(--gray);margin-top:2px;}
+.pill{display:inline-block;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px;}
+.pill.draft{background:#fef3c7;color:#92400e;} .pill.final{background:#d1fae5;color:#065f46;}
+
+/* Observation list rows inside an audit. */
+.orow{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:9px;}
+.oseq{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--gray);min-width:22px;text-align:center;}
+.otitle{flex:1;min-width:0;font-weight:500;font-size:14px;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Risk badge — C/H/M/L, coloured by severity so the list scans quickly. */
+.rbadge{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:0 0 auto;}
+.rbadge.C{background:#7f1d1d;} .rbadge.H{background:#dc2626;} .rbadge.M{background:#f59e0b;} .rbadge.L{background:#65a30d;}
+
+/* --------------------------------------------------------------------------
+   OBSERVATION EDITOR — each field group is introduced by a gold band that
+   mirrors the printed report, so the auditor sees the shape of the output
+   while typing. .eband is the app-side echo of the report's gold band.
+   -------------------------------------------------------------------------- */
+.eband{background:var(--gold);color:#111;font-weight:700;font-size:12.5px;padding:7px 12px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px;letter-spacing:.2px;}
+.ebody{background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:14px;margin-bottom:16px;}
+.esplit{display:grid;grid-template-columns:1fr 210px;gap:16px;align-items:start;}
+@media(max-width:820px){.esplit{grid-template-columns:1fr;}}
+/* Tick matrix in the editor — the People/Process/Technology checkbox groups. */
+.mx{border:1px solid #9ca3af;border-radius:6px;overflow:hidden;}
+.mxh{background:var(--gold);font-weight:700;font-size:12px;text-align:center;padding:6px;color:#111;}
+.mxr{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-top:1px solid #d1d5db;font-size:13px;cursor:pointer;user-select:none;}
+.mxr:hover{background:#fafafa;}
+.mxr input{width:16px;height:16px;accent-color:var(--red);cursor:pointer;}
+/* Risk rating selector — four boxes, the chosen one turns report-red. */
+.riskset{display:flex;gap:6px;}
+.riskbox{flex:1;text-align:center;padding:9px 4px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;background:#fff;transition:all .15s;}
+.riskbox small{display:block;font-weight:500;font-size:9.5px;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-top:2px;}
+.riskbox.on{background:var(--risk-red);border-color:var(--risk-red);color:#fff;}
+.riskbox.on small{color:rgba(255,255,255,.85);}
+/* Yes/No segmented toggles for Repeat and System Improvement. */
+.seg{display:inline-flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;}
+.seg button{border:none;background:#fff;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;color:var(--gray);}
+.seg button.on{background:var(--dark);color:#fff;}
+
+/* --------------------------------------------------------------------------
+   RICH TEXT EDITOR — a contenteditable box plus a small toolbar. This covers
+   everything the sample report needs inside a section body: bold, bullet and
+   numbered lists, indent levels, and real data tables.
+   -------------------------------------------------------------------------- */
+.rte-tb{display:flex;gap:3px;flex-wrap:wrap;padding:6px;background:var(--gray-light);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;}
+.rte-tb button{border:1px solid transparent;background:transparent;width:29px;height:27px;border-radius:5px;cursor:pointer;font-size:13px;color:#374151;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;}
+.rte-tb button:hover{background:#fff;border-color:var(--border);}
+.rte-tb button.wide{width:auto;padding:0 9px;font-size:12px;}
+.rte-tb .sep{width:1px;background:#d1d5db;margin:3px 4px;}
+.rte{border:1px solid var(--border);border-radius:0 0 8px 8px;padding:11px 13px;min-height:96px;background:#fff;font-size:13.5px;line-height:1.5;color:#1f2937;outline:none;overflow-x:auto;}
+.rte:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(200,16,46,.08);}
+.rte:empty:before{content:attr(data-ph);color:#9ca3af;}
+.rte ul,.rte ol{margin:4px 0 4px 22px;} .rte li{margin:2px 0;}
+.rte p{margin:4px 0;}
+/* Data tables inside the editor get visible borders so cells are obvious. */
+.rte table.dt{border-collapse:collapse;margin:8px 0;width:auto;}
+.rte table.dt td,.rte table.dt th{border:1px solid #9ca3af;padding:4px 6px;font-size:12.5px;min-width:52px;vertical-align:top;}
+.rte table.dt th{background:var(--gray-light);font-weight:700;text-align:left;}
+/* Contextual table controls, shown only while the caret sits inside a table. */
+.tblctl{display:none;gap:5px;padding:6px 8px;background:#fffbeb;border:1px solid #fde68a;border-top:none;font-size:11.5px;align-items:center;flex-wrap:wrap;}
+.tblctl.on{display:flex;}
+.tblctl b{font-weight:600;color:#92400e;margin-right:3px;}
+
+/* Implementation action-plan repeater rows. */
+.implrow{border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:11px;background:#fcfcfd;}
+.implhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;}
+.implhead span{font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.4px;}
+
+/* Autosave indicator that floats bottom-right while editing. */
+.saveflag{position:fixed;bottom:18px;right:18px;background:var(--dark);color:#fff;padding:8px 15px;border-radius:20px;font-size:12px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.saveflag.on{opacity:1;}
+.saveflag.ok{background:var(--success);}
+.saveflag.bad{background:#b91c1c;}
+
+/* Modal used for New Audit / Settings. */
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:300;padding:18px;overflow-y:auto;}
+.modal.on{display:flex;}
+.modalbox{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:92vh;overflow-y:auto;}
+.modaltitle{font-family:'Rajdhani',sans-serif;font-size:21px;font-weight:700;color:var(--dark);margin-bottom:16px;}
+
+/* ==========================================================================
+   ####  REPORT / PRINT STYLES  ####
+   Everything from here down reproduces the sample PDF. All dimensions are in
+   POINTS taken directly out of "Admin audit.pdf" (A4 = 595 x 842pt), so the
+   printed output lands on the same coordinates as the reports already issued:
+     content box   x 34.5 -> 560.3   (525.8pt wide)
+     title         17.3pt Arial Bold, 2 lines, 20.3pt leading
+     gold rule     1.2pt tall, full width
+     header band   32.3pt tall   |  section bands 19.1pt  |  left-column bands 15.5pt
+     left column   400.3pt wide  |  right column 119.5pt, 3.6pt gutter
+     body text     9.6pt Arial   |  footer 13.5pt Arial
+   DO NOT convert these to px or rem — the pt values are the spec.
+   ========================================================================== */
+#printroot{display:none;}
+.preview-on #printroot{display:block;background:#fff;width:595pt;margin:0 auto 40px;padding:32.4pt 34.7pt 27.5pt 34.5pt;box-shadow:0 6px 30px rgba(0,0,0,.18);}
+.preview-on .wrap{padding-bottom:20px;}
+
+/* The report is always Arial at 9.6pt — matching wkhtmltopdf's output. */
+#printroot{font-family:Arial,Helvetica,sans-serif;font-size:9.6pt;color:#000;line-height:1.32;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+/* Each observation begins on a fresh page, exactly as in the sample. */
+.pobs{break-before:page;page-break-before:always;}
+.pobs:first-child{break-before:auto;page-break-before:auto;}
+/* Observation title: "Observation N:" then the title, both 17.3pt bold. */
+.ptitle{font-size:17.3pt;font-weight:bold;line-height:20.3pt;margin-left:2.4pt;}
+/* The thin gold rule that separates the title from the header band. */
+.prule{height:1.2pt;background:var(--gold);margin-top:0;}
+/* HEADER BAND — 32.3pt tall. Children are absolutely positioned at the exact
+   x offsets measured in the source PDF (offsets are relative to band left). */
+.phdr{position:relative;height:32.3pt;background:var(--gold);margin-top:5.4pt;font-weight:bold;}
+.phdr>span{position:absolute;white-space:nowrap;}
+.ph-a{left:4.8pt;top:8.9pt;}          /* "Background"           (src x 39.3) */
+.ph-b{left:175.0pt;top:8.9pt;}        /* "Repeat: No"           (src x 209.5) */
+.ph-c{left:287.7pt;top:8.9pt;}        /* "Value: INR 0"          (src x 322.2) */
+.ph-d{left:413.4pt;top:4.1pt;line-height:9.6pt;text-align:center;width:30pt;}  /* "Risk / Rating" over 2 lines */
+.ph-e{left:445.7pt;top:8.35pt;}       /* the C H M L boxes      (src x 480.2) */
+/* Risk boxes: white with black letter; the selected one turns pure red. Widths
+   are intentionally NOT fixed — the source auto-sized each box to its glyph
+   (C/H 14.34pt, M 16.13pt, L 10.75pt), which padding reproduces. */
+.rb{display:inline-block;background:#fff;color:#000;font-weight:bold;font-style:normal;padding:2.4pt 3.6pt;margin-right:5.98pt;line-height:9.6pt;}
+.rb:last-child{margin-right:0;}
+.rb.on{background:var(--risk-red);}
+/* SECTION BAND — 19.1pt tall, full width. Left label, optional right label. */
+.pband{background:var(--gold);height:19.1pt;line-height:19.1pt;font-weight:bold;padding:0 4.8pt;margin-top:9pt;display:flex;justify-content:space-between;align-items:center;}
+/* LEFT-COLUMN BAND — 15.5pt tall, only 400.3pt wide (the narrower variant). */
+.pband2{background:var(--gold);height:15.5pt;line-height:15.5pt;font-weight:bold;padding:0 4.8pt;margin-top:9pt;}
+.pband2:first-child{margin-top:0;}
+/* Body text under any band. */
+.pbody{padding:10pt 4.8pt 0 3pt;}
+.pbody>*:first-child{margin-top:0;}
+.pbody ul,.pbody ol{margin:0;padding-left:23.9pt;}
+.pbody li{margin:1.5pt 0;}
+.pbody p{margin:3pt 0;}
+.pbody b,.pbody strong{font-weight:bold;}
+/* TWO-COLUMN REGION — Root Cause / Business Impact / Recommendation on the
+   left, their tick matrices on the right. The two columns stack independently
+   (in the source the right boxes do NOT line up with the left bands). */
+.ptwo{display:flex;gap:3.6pt;margin-top:9pt;padding-left:1.8pt;align-items:flex-start;}
+.pcolL{width:400.3pt;flex:0 0 auto;}
+.pcolR{width:119.5pt;flex:0 0 auto;}
+/* TICK MATRIX — gold header, then one row per option with a tick column. */
+.pmx{width:119.5pt;border-collapse:collapse;margin-bottom:9pt;break-inside:avoid;page-break-inside:avoid;}
+.pmx th{background:var(--gold);font-weight:bold;text-align:center;border:.6pt solid #808080;padding:2.8pt 2pt;font-size:9.6pt;}
+.pmx td{border:.6pt solid #808080;padding:3.2pt 1.8pt;font-size:9.6pt;vertical-align:middle;}
+.pmx td.tk{width:20.9pt;text-align:center;font-weight:bold;font-size:11pt;}
+/* IMPLEMENTATION TABLE — 3 columns at the widths measured in the source:
+   owners 77.7pt, action plan 360.3pt, timeline 77.1pt. */
+.pimpl{border-collapse:collapse;margin:9pt 0 0 4.2pt;width:517.4pt;table-layout:fixed;}
+.pimpl th{background:var(--gold);font-weight:bold;text-align:left;vertical-align:top;padding:3.6pt 4.2pt;border:.6pt solid var(--gold);}
+.pimpl td{padding:5pt 4.2pt;vertical-align:top;border:.6pt solid #fff;}
+.pimpl .c1{width:77.7pt;} .pimpl .c2{width:360.3pt;} .pimpl .c3{width:77.1pt;}
+.pimpl ol,.pimpl ul{margin:0 0 0 14pt;padding:0;}
+/* DATA TABLES typed by the auditor inside a section body. Same 9.6pt Arial as
+   the surrounding text, which is what the source used. */
+#printroot table.dt{border-collapse:collapse;margin:6pt 0;font-size:9.6pt;max-width:100%;}
+#printroot table.dt th,#printroot table.dt td{border:.6pt solid #000;padding:2.4pt 3.6pt;vertical-align:top;text-align:left;}
+#printroot table.dt th{font-weight:bold;}
+/* FOOTER — must repeat on every printed page, the way the sample's
+   "Draft Report - <code>_<location>_<area>" appears on all 9 pages.
+   The whole report is wrapped in a table whose <tfoot> carries the footer,
+   because Blink repeats a tfoot on every page fragment AND reserves its space
+   in the flow. A position:fixed footer was tried first and rejected: with
+   bottom:0 it paints over the last lines of body text on any full page, and
+   with any offset that clears the text (negative bottom, or a transform) it
+   silently vanishes from page 1 and mis-anchors on the rest. */
+.pwrap{width:100%;border-collapse:collapse;}
+.pwrap>tbody>tr>td,.pwrap>tfoot>tr>td{padding:0;}
+.pfoot{font-size:13.5pt;padding-top:6pt;}
+.pwrap>tfoot{break-inside:avoid;page-break-inside:avoid;}
+@media screen{ .preview-on .pfoot{border-top:1px dashed #ccc;color:#333;} }
+
+/* PRINT — hide the whole app, show only the report, and set the page box to
+   the sample's margins so the content lands on the same coordinates. */
+@page{ size:A4; margin:32.4pt 34.7pt 27.5pt 34.5pt; }
+@media print{
+  body{background:#fff;}
+  /* Force every element in the report to keep its fill, so the gold bands
+     and the red risk box print in colour even when the print dialog's
+     "Background graphics" box is left unticked (Chrome drops them
+     silently otherwise, which prints the whole report in black + white). */
+  #printroot,#printroot *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+  .header,.wrap,.saveflag,.modal,.noprint{display:none !important;}
+  #printroot{display:block !important;width:auto;margin:0;padding:0;box-shadow:none;}
+  /* Keep bands glued to the text they introduce, and never split a matrix. */
+  .phdr,.pband,.pband2{break-after:avoid;page-break-after:avoid;}
+  .ptitle{break-after:avoid;page-break-after:avoid;}
+  tr,.pmx{break-inside:avoid;page-break-inside:avoid;}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= SIGN IN ======================= -->
+<div id="scr-auth" class="screen active">
+  <div class="auth-wrap"><div class="auth-card">
+    <div class="auto-logo-wrap auth-logo-wrap">
+      <div class="auth-logo">IA</div>
+      <div class="auth-brand">Internal <span>Audit</span></div>
+      <div class="auth-tagline">Observation &amp; report builder</div>
+    </div>
+    <div class="auth-title">Sign in</div>
+    <div class="auth-desc">Enter the internal audit team password to open the report builder.</div>
+    <div id="authErr"></div>
+    <form id="authForm">
+      <div class="form-group">
+        <label class="form-label" for="pw">Team password</label>
+        <input class="form-input" type="password" id="pw" autocomplete="current-password" required>
+      </div>
+      <button class="btn-primary" type="submit" id="authBtn">Sign in</button>
+    </form>
+    <div class="hint" id="modeHint" style="text-align:center;margin-top:14px;"></div>
+  </div></div>
+</div>
+
+<!-- ======================= APP HEADER ======================= -->
+<div class="header noprint" id="appHeader" style="display:none;">
+  <div class="hb">
+    <div class="hl">IA</div>
+    <div><div class="ht">INTERNAL <span>AUDIT</span></div><div class="hs">Report Builder</div></div>
+  </div>
+  <div class="hr">
+    <span class="ubadge" id="storeBadge"></span>
+    <button class="bso" id="btnSettings">Settings</button>
+    <button class="bso" id="btnOut">Sign out</button>
+  </div>
+</div>
+
+<!-- ======================= AUDIT LIST ======================= -->
+<div id="scr-list" class="screen">
+  <div class="wrap">
+    <div class="pagehead">
+      <div><div class="pagetitle">Audits</div><div class="pagesub" id="listSub"></div></div>
+      <div class="toolbar">
+        <input class="form-input" id="listSearch" placeholder="Search code, location or area…" style="width:250px;">
+        <button class="btn pri" id="btnNewAudit">+ New audit</button>
+      </div>
+    </div>
+    <div id="listBody"></div>
+  </div>
+</div>
+
+<!-- ======================= AUDIT WORKSPACE ======================= -->
+<div id="scr-audit" class="screen">
+  <div class="wrap">
+    <div class="pagehead">
+      <div>
+        <div class="pagetitle" id="auTitle"></div>
+        <div class="pagesub" id="auSub"></div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="btnBackList">&larr; All audits</button>
+        <button class="btn" id="btnEditAudit">Audit details</button>
+        <button class="btn gold" id="btnPreview">Preview report</button>
+        <button class="btn pri" id="btnPrint">Export PDF</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+        <div style="font-weight:600;font-size:15px;">Observations</div>
+        <button class="btn pri" id="btnAddObs">+ Add observation</button>
+      </div>
+      <div id="obsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= OBSERVATION EDITOR ======================= -->
+<div id="scr-obs" class="screen">
+  <div class="wrap">
+    <div class="pagehead">
+      <div><div class="pagetitle" id="obTitleHead">Observation</div><div class="pagesub" id="obSub"></div></div>
+      <div class="toolbar">
+        <button class="btn" id="btnBackAudit">&larr; Back to audit</button>
+        <button class="btn dgr" id="btnDelObs">Delete</button>
+        <button class="btn pri" id="btnSaveObs">Save</button>
+      </div>
+    </div>
+    <div id="obsForm"></div>
+  </div>
+</div>
+
+<!-- ======================= REPORT PREVIEW ======================= -->
+<div id="scr-preview" class="screen">
+  <div class="wrap noprint">
+    <div class="pagehead">
+      <div><div class="pagetitle">Report preview</div>
+        <div class="pagesub">Shown at true A4 width. Use <b>Export PDF</b> and pick “Save as PDF”, with headers/footers switched off and margins set to <b>Default</b>.</div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="btnBackAudit2">&larr; Back to audit</button>
+        <button class="btn pri" id="btnPrint2">Export PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- The report itself. Rendered into for both preview and printing. -->
+<div id="printroot"></div>
+
+<div class="saveflag" id="saveflag"></div>
+
+<!-- ======================= MODALS ======================= -->
+<div class="modal" id="modal"><div class="modalbox">
+  <div class="modaltitle" id="modalTitle"></div>
+  <div id="modalBody"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+    <button class="btn" id="modalCancel">Cancel</button>
+    <button class="btn pri" id="modalOk">Save</button>
+  </div>
+</div></div>
+
+<script>
+/* ==========================================================================
+   CONFIG
+   Leave API empty to run entirely in this browser (localStorage) — useful for
+   trying the tool out or drafting offline. Point it at the Cloudflare Worker
+   to share audits across the team. See SETUP.md.
+   ========================================================================== */
+const CFG = {
+  API: '',                                     // e.g. 'https://mrf-audit-tool.jofran81.workers.dev'
+  ORG: 'MRF Corp Limited',
+  RISK: {C:'Critical', H:'High', M:'Medium', L:'Low'},
+  ROOT_CAUSE:  ['People','Process','Technology'],
+  IMPACT:      ['Operational','Financial','Compliance','Reputational'],
+  RECOMMEND:   ['People','Process','Technology'],
+  /* Seed picklists. Once a Worker is connected these come from the Config tab
+     of the Sheet and are editable in Settings. */
+  SEED_CONFIG: {
+    areas:  ['Administration Control','Procurement','Stores & Inventory','Finance & Accounts','Human Resources','Sales & Marketing','Production','Maintenance'],
+    owners: ['Manoj Sharma ( Head Com Nalagarh)']
+  }
+};
+
+/* ==========================================================================
+   SMALL HELPERS
+   ========================================================================== */
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+/* Escape text that goes into HTML we build by hand. */
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* Indian digit grouping — the sample report writes 1,69,000 not 169,000. */
+function inr(n){
+  n = Math.round(Number(n)||0);
+  const s = String(Math.abs(n));
+  let out;
+  if (s.length <= 3) out = s;
+  else { const last3 = s.slice(-3); out = s.slice(0,-3).replace(/\B(?=(\d{2})+(?!\d))/g,',') + ',' + last3; }
+  return (n<0?'-':'') + out;
+}
+/* "2024-03-31" -> "March 31, 2024", the format used in the sample. */
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function longDate(iso){
+  if(!iso) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if(!m) return iso;
+  return `${MONTHS[+m[2]-1]} ${+m[3]}, ${m[1]}`;
+}
+function flag(msg, kind){
+  const f = $('#saveflag');
+  f.textContent = msg;
+  f.className = 'saveflag on' + (kind ? ' '+kind : '');
+  clearTimeout(flag._t);
+  flag._t = setTimeout(()=>{ f.className = 'saveflag'; }, 2200);
+}
+function show(id){
+  $$('.screen').forEach(s=>s.classList.remove('active'));
+  $('#'+id).classList.add('active');
+  document.body.classList.toggle('preview-on', id === 'scr-preview');
+  window.scrollTo(0,0);
+}
+
+/* ==========================================================================
+   SAFE STORAGE
+   localStorage / sessionStorage throw outright in some contexts (private
+   browsing with storage blocked, sandboxed iframes, data: URLs). Every access
+   goes through these wrappers so a blocked store degrades to in-memory state
+   for the session instead of breaking the app on load.
+   ========================================================================== */
+const MemStore = {};
+function ss(key, val){
+  try {
+    if (val === undefined) return sessionStorage.getItem(key);
+    if (val === null) { sessionStorage.removeItem(key); return null; }
+    sessionStorage.setItem(key, val); return val;
+  } catch(e){
+    if (val === undefined) return MemStore[key] ?? null;
+    if (val === null) { delete MemStore[key]; return null; }
+    MemStore[key] = val; return val;
+  }
+}
+function lsGet(key){ try { return localStorage.getItem(key); } catch(e){ return MemStore['ls:'+key] ?? null; } }
+function lsSet(key, val){ try { localStorage.setItem(key, val); } catch(e){ MemStore['ls:'+key] = val; } }
+
+/* ==========================================================================
+   SANITISER
+   Section bodies are rich HTML that round-trips through the Google Sheet and
+   is re-rendered later, so it is cleaned on the way in: only the tags the
+   report actually uses survive, and every attribute is dropped except table
+   spans. This blocks anything injected via a paste from Word or a browser.
+   ========================================================================== */
+const OK_TAGS = new Set(['B','STRONG','I','EM','U','BR','P','DIV','SPAN','UL','OL','LI','TABLE','THEAD','TBODY','TR','TH','TD']);
+const DROP_TAGS = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','LINK','META','FORM','INPUT','BUTTON','SVG','IMG','VIDEO','AUDIO']);
+function sanitize(html){
+  /* Parsed inside a <template>, whose content lives in an inert document: an
+     <img src> or <iframe src> in hostile content is NOT fetched while we walk
+     it. Assigning to a live element's innerHTML would fire those requests
+     before the tags got stripped, letting pasted content phone home. */
+  const box = document.createElement('template');
+  box.innerHTML = String(html||'');
+  (function walk(node){
+    [...node.childNodes].forEach(ch=>{
+      if (ch.nodeType === 3) return;                        // text: keep
+      if (ch.nodeType !== 1) { node.removeChild(ch); return; } // comments etc: drop
+      if (DROP_TAGS.has(ch.tagName)) { node.removeChild(ch); return; }
+      walk(ch);
+      if (!OK_TAGS.has(ch.tagName)) {                        // unknown tag: unwrap, keep text
+        while (ch.firstChild) node.insertBefore(ch.firstChild, ch);
+        node.removeChild(ch);
+        return;
+      }
+      [...ch.attributes].forEach(a=>{
+        const n = a.name.toLowerCase();
+        if (n === 'colspan' || n === 'rowspan') return;
+        ch.removeAttribute(a.name);
+      });
+      if (ch.tagName === 'TABLE') ch.className = 'dt';       // all tables print as data tables
+    });
+  })(box.content);
+  return box.innerHTML.trim();
+}
+/* True when a rich-text field has no real content (used to skip empty bands). */
+function blank(html){
+  const t = document.createElement('template');   // inert: see sanitize()
+  t.innerHTML = String(html||'');
+  return !t.content.querySelector('table') && !t.content.textContent.trim();
+}
+
+/* ==========================================================================
+   STORAGE
+   Two drivers behind one interface. LOCAL keeps everything in localStorage so
+   the tool works with no backend at all; REMOTE talks to the Cloudflare Worker
+   which holds the signed token and is the only thing that can reach the Sheet.
+   ========================================================================== */
+const LS = 'auditTool.v1';
+const Local = {
+  read(){ try { return JSON.parse(lsGet(LS)) || {}; } catch(e){ return {}; } },
+  write(d){ lsSet(LS, JSON.stringify(d)); },
+  db(){ const d = this.read(); d.audits ||= []; d.obs ||= []; d.config ||= JSON.parse(JSON.stringify(CFG.SEED_CONFIG)); return d; }
+};
+const Store = {
+  mode: CFG.API ? 'remote' : 'local',
+  token: null,
+
+  async call(action, payload){
+    const r = await fetch(CFG.API + '/api', {
+      method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, this.token ? {'Authorization':'Bearer '+this.token} : {}),
+      body: JSON.stringify(Object.assign({action}, payload||{}))
+    });
+    const j = await r.json().catch(()=>({error:'Bad response from server'}));
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP '+r.status));
+    return j;
+  },
+
+  async login(pw){
+    if (this.mode === 'local'){
+      const d = Local.db();
+      if (d.pw && d.pw !== pw) throw new Error('Wrong password.');
+      if (!d.pw){ d.pw = pw; Local.write(d); }        // first run sets the local password
+      this.token = 'local';
+      return;
+    }
+    const j = await this.call('login', {password: pw});
+    this.token = j.token;
+    ss('auditTool.token', j.token);
+  },
+
+  resume(){
+    if (this.mode === 'local'){
+      if (ss('auditTool.local') === '1'){ this.token = 'local'; return true; }
+      return false;
+    }
+    const t = ss('auditTool.token');
+    if (t){ this.token = t; return true; }
+    return false;
+  },
+
+  async getConfig(){
+    if (this.mode === 'local') return Local.db().config;
+    return (await this.call('config')).config;
+  },
+  async saveConfig(config){
+    if (this.mode === 'local'){ const d = Local.db(); d.config = config; Local.write(d); return; }
+    await this.call('saveConfig', {config});
+  },
+  async listAudits(){
+    if (this.mode === 'local') return Local.db().audits;
+    return (await this.call('listAudits')).audits || [];
+  },
+  async saveAudit(a){
+    a.updated_at = new Date().toISOString();
+    if (this.mode === 'local'){
+      const d = Local.db();
+      const i = d.audits.findIndex(x=>x.id===a.id);
+      if (i<0) d.audits.push(a); else d.audits[i] = a;
+      Local.write(d); return a;
+    }
+    await this.call('saveAudit', {audit:a}); return a;
+  },
+  async deleteAudit(id){
+    if (this.mode === 'local'){
+      const d = Local.db();
+      d.audits = d.audits.filter(x=>x.id!==id);
+      d.obs = d.obs.filter(o=>o.audit_id!==id);
+      Local.write(d); return;
+    }
+    await this.call('deleteAudit', {id});
+  },
+  async listObs(auditId){
+    let rows;
+    if (this.mode === 'local') rows = Local.db().obs.filter(o=>o.audit_id===auditId);
+    else rows = (await this.call('listObs', {auditId})).observations || [];
+    return rows.sort((a,b)=>(a.seq||0)-(b.seq||0));
+  },
+  async saveObs(o){
+    o.updated_at = new Date().toISOString();
+    if (this.mode === 'local'){
+      const d = Local.db();
+      const i = d.obs.findIndex(x=>x.id===o.id);
+      if (i<0) d.obs.push(o); else d.obs[i] = o;
+      Local.write(d); return o;
+    }
+    await this.call('saveObs', {observation:o}); return o;
+  },
+  async deleteObs(id){
+    if (this.mode === 'local'){
+      const d = Local.db();
+      d.obs = d.obs.filter(x=>x.id!==id);
+      Local.write(d); return;
+    }
+    await this.call('deleteObs', {id});
+  }
+};
+
+/* ==========================================================================
+   APP STATE
+   ========================================================================== */
+const S = { config:null, audits:[], audit:null, obs:[], ob:null, dirty:false };
+
+/* Blank records — the shape of an audit and of an observation. */
+function newAudit(){
+  return { id:uid(), code:'', location:'', area:'', period_from:'', period_to:'',
+           status:'Draft', audit_team:'', created_at:new Date().toISOString(), updated_at:'' };
+}
+function newObs(auditId, seq){
+  return { id:uid(), audit_id:auditId, seq,
+           title:'', repeat:'No', value_at_risk:0, risk_rating:'L', system_improvement:'No',
+           background:'', observation:'',
+           root_cause:'', root_cause_tags:[],
+           business_impact:'', impact_tags:[],
+           recommendation:'', recommendation_tags:[],
+           management_response:'',
+           implementation:[], attachments:[], updated_at:'' };
+}
+/* The footer line, e.g. "Draft Report - 58_Nalagarh_Administration Control". */
+function footerText(a){
+  const parts = [a.code, a.location, a.area].filter(Boolean).join('_');
+  return `${a.status||'Draft'} Report - ${parts}`;
+}
+
+/* ==========================================================================
+   RICH TEXT EDITOR
+   contenteditable + execCommand. execCommand is formally deprecated but it is
+   the only zero-dependency way to get list/bold behaviour that works in every
+   browser, and this app deliberately ships without a build step or framework.
+   ========================================================================== */
+function rteHTML(id, ph, html){
+  return `
+  <div class="rte-tb">
+    <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+    <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+    <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+    <div class="sep"></div>
+    <button type="button" data-cmd="insertUnorderedList" title="Bullet list">&#8226;&#8801;</button>
+    <button type="button" data-cmd="insertOrderedList" title="Numbered list">1&#8801;</button>
+    <button type="button" data-cmd="outdent" title="Decrease indent">&#8676;</button>
+    <button type="button" data-cmd="indent" title="Increase indent">&#8677;</button>
+    <div class="sep"></div>
+    <button type="button" class="wide" data-act="table" title="Insert a data table">+ Table</button>
+    <button type="button" class="wide" data-cmd="removeFormat" title="Strip formatting">Clear</button>
+  </div>
+  <div class="rte" id="${id}" contenteditable="true" data-ph="${esc(ph)}">${html||''}</div>
+  <div class="tblctl" id="${id}-tc">
+    <b>Table:</b>
+    <button type="button" class="btn sm" data-t="row+">+ Row</button>
+    <button type="button" class="btn sm" data-t="row-">&minus; Row</button>
+    <button type="button" class="btn sm" data-t="col+">+ Column</button>
+    <button type="button" class="btn sm" data-t="col-">&minus; Column</button>
+    <button type="button" class="btn sm" data-t="hdr">Toggle header row</button>
+    <button type="button" class="btn sm dgr" data-t="del">Delete table</button>
+  </div>`;
+}
+/* Wire up one editor instance: toolbar, table controls, and change tracking. */
+function rteInit(id, onChange){
+  const ed = $('#'+id);
+  const tb = ed.previousElementSibling;
+  const tc = $('#'+id+'-tc');
+
+  tb.addEventListener('mousedown', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    e.preventDefault();                                  // keep the caret in the editor
+    ed.focus();
+    if (b.dataset.cmd){ document.execCommand(b.dataset.cmd, false, null); }
+    else if (b.dataset.act === 'table'){ insertTable(ed); }
+    onChange && onChange();
+    syncTableCtl();
+  });
+
+  /* Show the table controls only while the caret is inside a table. */
+  function syncTableCtl(){
+    const cell = caretCell(ed);
+    if (cell) lastCell.set(ed, cell);
+    tc.classList.toggle('on', !!(cell || (lastCell.get(ed) && ed.contains(lastCell.get(ed)))));
+  }
+  ed.addEventListener('keyup', ()=>{ onChange && onChange(); syncTableCtl(); });
+  ed.addEventListener('mouseup', syncTableCtl);
+  ed.addEventListener('input', ()=> onChange && onChange());
+  ed.addEventListener('focus', syncTableCtl);
+  /* Paste as plain-ish text: run the clipboard HTML through the sanitiser so a
+     paste from Excel keeps its table but drops all the styling noise. */
+  ed.addEventListener('paste', e=>{
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+    if (html) document.execCommand('insertHTML', false, sanitize(html));
+    else document.execCommand('insertText', false, text);
+    onChange && onChange();
+  });
+
+  tc.addEventListener('mousedown', e=>{
+    const b = e.target.closest('button[data-t]'); if(!b) return;
+    e.preventDefault();
+    tableOp(ed, b.dataset.t);
+    onChange && onChange();
+  });
+  return ed;
+}
+/* The <td>/<th> the caret currently sits in, or null. */
+function caretCell(ed){
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  let n = sel.getRangeAt(0).startContainer;
+  if (n.nodeType === 3) n = n.parentNode;
+  if (!ed.contains(n)) return null;
+  return n.closest ? n.closest('td,th') : null;
+}
+/* Removing a row or column destroys the cell the caret was in, which would
+   make the *next* toolbar click a silent no-op. Remember the last cell per
+   editor and move the caret to a surviving cell after every operation, so
+   several table edits in a row behave the way the user expects. */
+const lastCell = new WeakMap();
+function activeCell(ed){
+  const c = caretCell(ed);
+  if (c){ lastCell.set(ed, c); return c; }
+  const prev = lastCell.get(ed);
+  return (prev && ed.contains(prev)) ? prev : null;
+}
+function placeCaret(ed, cell){
+  if (!cell || !ed.contains(cell)) return;
+  const r = document.createRange();
+  r.selectNodeContents(cell); r.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  lastCell.set(ed, cell);
+}
+function insertTable(ed){
+  const cols = Math.max(1, Math.min(14, parseInt(prompt('Number of columns?', '4')||'0',10)));
+  if (!cols) return;
+  const rows = Math.max(1, Math.min(80, parseInt(prompt('Number of data rows (excluding the header)?', '3')||'0',10)));
+  if (!rows) return;
+  let h = '<table class="dt"><thead><tr>';
+  for (let c=0;c<cols;c++) h += '<th>Column '+(c+1)+'</th>';
+  h += '</tr></thead><tbody>';
+  for (let r=0;r<rows;r++){ h += '<tr>'; for(let c=0;c<cols;c++) h += '<td><br></td>'; h += '</tr>'; }
+  h += '</tbody></table><p><br></p>';
+  document.execCommand('insertHTML', false, h);
+}
+/* Add/remove rows and columns relative to the caret's cell. */
+function tableOp(ed, op){
+  const cell = activeCell(ed);
+  if (!cell){ flag('Click inside a table first', 'bad'); return; }
+  const tr = cell.parentNode, table = cell.closest('table');
+  const idx = [...tr.children].indexOf(cell);
+  const allRows = [...table.querySelectorAll('tr')];
+
+  if (op === 'row+'){
+    const nr = tr.cloneNode(true);
+    [...nr.children].forEach(td=>{ td.innerHTML = '<br>'; });
+    tr.parentNode.insertBefore(nr, tr.nextSibling);
+    placeCaret(ed, nr.children[idx]);
+
+  } else if (op === 'row-'){
+    if (allRows.length <= 1){ flag('A table needs at least one row', 'bad'); return; }
+    const rowPos = allRows.indexOf(tr);
+    const survivor = allRows[rowPos + 1] || allRows[rowPos - 1];
+    tr.parentNode.removeChild(tr);
+    placeCaret(ed, survivor && survivor.children[Math.min(idx, survivor.children.length-1)]);
+
+  } else if (op === 'col+'){
+    allRows.forEach(r=>{
+      const ref = r.children[idx];
+      const tag = (r.children[0] && r.children[0].tagName === 'TH') ? 'th' : 'td';
+      const nc = document.createElement(tag);
+      nc.innerHTML = tag === 'th' ? 'Column' : '<br>';
+      r.insertBefore(nc, ref ? ref.nextSibling : null);
+    });
+    placeCaret(ed, tr.children[idx + 1]);
+
+  } else if (op === 'col-'){
+    if (tr.children.length <= 1){ flag('A table needs at least one column', 'bad'); return; }
+    allRows.forEach(r=>{ if (r.children[idx]) r.removeChild(r.children[idx]); });
+    placeCaret(ed, tr.children[Math.min(idx, tr.children.length-1)]);
+
+  } else if (op === 'hdr'){
+    /* Swap the first row between <th> and <td>. The cells are replaced, so the
+       caret has to be re-seated afterwards or a second click does nothing. */
+    const first = allRows[0];
+    const toTH = first.children[0].tagName === 'TD';
+    const wasFirstRow = (tr === first);
+    [...first.children].forEach(c=>{
+      const n = document.createElement(toTH ? 'th' : 'td');
+      n.innerHTML = c.innerHTML;
+      c.parentNode.replaceChild(n, c);
+    });
+    placeCaret(ed, wasFirstRow ? first.children[idx] : cell);
+
+  } else if (op === 'del'){
+    if (confirm('Delete this whole table?')){
+      table.parentNode.removeChild(table);
+      lastCell.delete(ed);
+    }
+  }
+}
+
+/* ==========================================================================
+   SCREEN: SIGN IN
+   ========================================================================== */
+$('#modeHint').textContent = CFG.API
+  ? 'Connected to the shared audit workspace.'
+  : 'Local mode — audits are stored in this browser only. Set CFG.API to share with the team.';
+
+$('#authForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const btn = $('#authBtn'), pw = $('#pw').value;
+  $('#authErr').innerHTML = '';
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    await Store.login(pw);
+    if (Store.mode === 'local') ss('auditTool.local','1');
+    await boot();
+  } catch(err){
+    $('#authErr').innerHTML = '<div class="err">'+esc(err.message)+'</div>';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+});
+$('#btnOut').addEventListener('click', ()=>{
+  ss('auditTool.token', null);
+  ss('auditTool.local', null);
+  location.reload();
+});
+
+/* After a successful sign-in: load picklists + the audit list. */
+async function boot(){
+  $('#appHeader').style.display = 'flex';
+  $('#storeBadge').textContent = Store.mode === 'local' ? 'Local browser storage' : 'Shared workspace';
+  try {
+    S.config = await Store.getConfig();
+  } catch(e){
+    S.config = JSON.parse(JSON.stringify(CFG.SEED_CONFIG));
+    flag('Could not load settings — using defaults', 'bad');
+  }
+  ['areas','owners'].forEach(k=> S.config[k] ||= []);
+  await loadList();
+}
+
+/* ==========================================================================
+   SCREEN: AUDIT LIST
+   ========================================================================== */
+async function loadList(){
+  try { S.audits = await Store.listAudits(); }
+  catch(e){ S.audits = []; flag('Could not load audits: '+e.message, 'bad'); }
+  renderList();
+  show('scr-list');
+}
+$('#listSearch').addEventListener('input', renderList);
+function renderList(){
+  const q = $('#listSearch').value.trim().toLowerCase();
+  const rows = S.audits
+    .filter(a => !q || [a.code,a.location,a.area].join(' ').toLowerCase().includes(q))
+    .sort((a,b)=> String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||'')));
+
+  $('#listSub').textContent = S.audits.length
+    ? `${S.audits.length} audit${S.audits.length===1?'':'s'} · ${CFG.ORG}`
+    : CFG.ORG;
+
+  if (!rows.length){
+    $('#listBody').innerHTML = `<div class="empty">
+      <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:6px;">${S.audits.length?'No audits match that search':'No audits yet'}</div>
+      <div>${S.audits.length?'Try a different code, location or area.':'Create your first audit to start recording observations.'}</div></div>`;
+    return;
+  }
+  $('#listBody').innerHTML = rows.map(a=>{
+    const period = (a.period_from||a.period_to) ? `${a.period_from||'?'} → ${a.period_to||'?'}` : 'Period not set';
+    return `<div class="arow" data-id="${esc(a.id)}">
+      <div class="acode">${esc(a.code||'—')}</div>
+      <div class="amain">
+        <div class="aname">${esc(a.location||'Location not set')} · ${esc(a.area||'Area not set')}</div>
+        <div class="ameta">${esc(period)} &nbsp;·&nbsp; ${esc(footerText(a))}</div>
+      </div>
+      <span class="pill ${a.status==='Final'?'final':'draft'}">${esc(a.status||'Draft')}</span>
+    </div>`;
+  }).join('');
+  $$('#listBody .arow').forEach(el=>{
+    el.addEventListener('click', ()=> openAudit(el.dataset.id));
+  });
+}
+
+/* ==========================================================================
+   SCREEN: AUDIT WORKSPACE
+   ========================================================================== */
+async function openAudit(id){
+  S.audit = S.audits.find(a=>a.id===id);
+  if (!S.audit) return;
+  try { S.obs = await Store.listObs(id); }
+  catch(e){ S.obs = []; flag('Could not load observations: '+e.message,'bad'); }
+  renderAudit();
+  show('scr-audit');
+}
+function renderAudit(){
+  const a = S.audit;
+  $('#auTitle').textContent = `${a.code||'—'} · ${a.location||'Location not set'}`;
+  $('#auSub').innerHTML = `${esc(a.area||'Area not set')} &nbsp;·&nbsp; ${esc(a.period_from||'?')} → ${esc(a.period_to||'?')}
+    &nbsp;·&nbsp; <span class="pill ${a.status==='Final'?'final':'draft'}">${esc(a.status||'Draft')}</span>`;
+
+  if (!S.obs.length){
+    $('#obsList').innerHTML = `<div class="empty">No observations yet. Add the first one to begin.</div>`;
+    return;
+  }
+  $('#obsList').innerHTML = S.obs.map((o,i)=>`
+    <div class="orow" data-id="${esc(o.id)}">
+      <div class="oseq">${i+1}</div>
+      <div class="rbadge ${esc(o.risk_rating||'L')}" title="${esc(CFG.RISK[o.risk_rating]||'')}">${esc(o.risk_rating||'L')}</div>
+      <div class="otitle">${esc(o.title||'(untitled observation)')}</div>
+      <div style="font-size:12px;color:var(--gray);white-space:nowrap;">${Number(o.value_at_risk)>0?'INR '+inr(o.value_at_risk):''}</div>
+      <button class="btn sm" data-mv="up"  ${i===0?'disabled':''} title="Move up">&uarr;</button>
+      <button class="btn sm" data-mv="dn"  ${i===S.obs.length-1?'disabled':''} title="Move down">&darr;</button>
+      <button class="btn sm pri" data-open="1">Edit</button>
+    </div>`).join('');
+
+  $$('#obsList .orow').forEach(el=>{
+    const id = el.dataset.id;
+    el.querySelector('[data-open]').addEventListener('click', ()=> openObs(id));
+    el.querySelector('.otitle').addEventListener('click', ()=> openObs(id));
+    el.querySelectorAll('[data-mv]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const i = S.obs.findIndex(o=>o.id===id);
+        const j = b.dataset.mv === 'up' ? i-1 : i+1;
+        if (j<0 || j>=S.obs.length) return;
+        [S.obs[i], S.obs[j]] = [S.obs[j], S.obs[i]];
+        S.obs.forEach((o,k)=> o.seq = k+1);
+        renderAudit();
+        try { await Promise.all([Store.saveObs(S.obs[i]), Store.saveObs(S.obs[j])]); flag('Order saved','ok'); }
+        catch(e){ flag('Could not save order: '+e.message,'bad'); }
+      });
+    });
+  });
+}
+$('#btnBackList').addEventListener('click', loadList);
+$('#btnBackAudit').addEventListener('click', ()=>{ renderAudit(); show('scr-audit'); });
+$('#btnBackAudit2').addEventListener('click', ()=>{ renderAudit(); show('scr-audit'); });
+$('#btnAddObs').addEventListener('click', async ()=>{
+  const o = newObs(S.audit.id, S.obs.length+1);
+  S.obs.push(o);
+  try { await Store.saveObs(o); } catch(e){ flag('Could not create: '+e.message,'bad'); }
+  openObs(o.id);
+});
+
+/* ==========================================================================
+   SCREEN: OBSERVATION EDITOR
+   Field order deliberately mirrors the printed page, top to bottom.
+   ========================================================================== */
+function openObs(id){
+  S.ob = S.obs.find(o=>o.id===id);
+  if (!S.ob) return;
+  renderObsForm();
+  show('scr-obs');
+}
+function tickGroup(title, opts, chosen, key){
+  return `<div class="mx">
+    <div class="mxh">${esc(title)}</div>
+    ${opts.map(o=>`<label class="mxr"><span>${esc(o)}</span>
+      <input type="checkbox" data-tag="${esc(key)}" value="${esc(o)}" ${chosen.includes(o)?'checked':''}></label>`).join('')}
+  </div>`;
+}
+function renderObsForm(){
+  const o = S.ob;
+  const i = S.obs.findIndex(x=>x.id===o.id);
+  $('#obTitleHead').textContent = 'Observation ' + (i+1);
+  $('#obSub').textContent = `${S.audit.code||'—'} · ${S.audit.location||''} · ${S.audit.area||''}`;
+
+  const ownerOpts = ['<option value="">— select owner —</option>']
+    .concat((S.config.owners||[]).map(n=>`<option>${esc(n)}</option>`)).join('');
+
+  $('#obsForm').innerHTML = `
+  <!-- Title + header-band fields -->
+  <div class="eband"><span>Observation heading &amp; risk</span></div>
+  <div class="ebody">
+    <div class="form-group">
+      <label class="form-label" for="f_title">Observation title <span style="color:var(--red)">*</span></label>
+      <input class="form-input" id="f_title" value="${esc(o.title)}" placeholder="e.g. Excess payment of telephone expenses">
+      <div class="hint">Prints as the second line of the heading, under “Observation ${i+1}:”.</div>
+    </div>
+    <div class="grid3">
+      <div class="form-group">
+        <label class="form-label">Repeat observation</label>
+        <div class="seg" id="f_repeat">
+          <button type="button" data-v="No"  class="${o.repeat!=='Yes'?'on':''}">No</button>
+          <button type="button" data-v="Yes" class="${o.repeat==='Yes'?'on':''}">Yes</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">System improvement</label>
+        <div class="seg" id="f_sysimp">
+          <button type="button" data-v="No"  class="${o.system_improvement!=='Yes'?'on':''}">No</button>
+          <button type="button" data-v="Yes" class="${o.system_improvement==='Yes'?'on':''}">Yes</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="f_var">Value (INR)</label>
+        <input class="form-input" id="f_var" type="number" min="0" step="1" value="${esc(o.value_at_risk||0)}">
+        <div class="hint">Prints as “Value: INR <b id="varEcho">${inr(o.value_at_risk)}</b>”.</div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Risk rating</label>
+      <div class="riskset" id="f_risk">
+        ${Object.entries(CFG.RISK).map(([k,v])=>`
+          <div class="riskbox ${o.risk_rating===k?'on':''}" data-v="${k}">${k}<small>${esc(v)}</small></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- Background -->
+  <div class="eband"><span>Background</span></div>
+  <div class="ebody">${rteHTML('f_background','Context for the observation — what the process is, what was reviewed, what was spent…', o.background)}</div>
+
+  <!-- Observation(s) -->
+  <div class="eband"><span>Observation(s)</span><span>System Improvement: <b id="sysEcho">${esc(o.system_improvement||'No')}</b></span></div>
+  <div class="ebody">${rteHTML('f_observation','The findings themselves. Use numbered items for each finding and “+ Table” for supporting data.', o.observation)}</div>
+
+  <!-- Root cause + tick matrix -->
+  <div class="eband"><span>Root Cause(s)</span></div>
+  <div class="ebody"><div class="esplit">
+    <div>${rteHTML('f_root_cause','Why it happened…', o.root_cause)}</div>
+    ${tickGroup('Root Cause', CFG.ROOT_CAUSE, o.root_cause_tags||[], 'root_cause_tags')}
+  </div></div>
+
+  <!-- Business impact + tick matrix -->
+  <div class="eband"><span>Business Impact(s)</span></div>
+  <div class="ebody"><div class="esplit">
+    <div>${rteHTML('f_business_impact','What it costs or risks…', o.business_impact)}</div>
+    ${tickGroup('Impact', CFG.IMPACT, o.impact_tags||[], 'impact_tags')}
+  </div></div>
+
+  <!-- Recommendation + tick matrix -->
+  <div class="eband"><span>Recommendation(s)</span></div>
+  <div class="ebody"><div class="esplit">
+    <div>${rteHTML('f_recommendation','What should be done to address it…', o.recommendation)}</div>
+    ${tickGroup('Recommendation', CFG.RECOMMEND, o.recommendation_tags||[], 'recommendation_tags')}
+  </div></div>
+
+  <!-- Management response -->
+  <div class="eband"><span>Management Response(s)</span></div>
+  <div class="ebody">${rteHTML('f_management_response','The auditee’s reply, as received…', o.management_response)}</div>
+
+  <!-- Implementation action plan repeater -->
+  <div class="eband"><span>Implementation action plan</span><button class="btn sm" id="btnAddImpl" style="background:#fff;">+ Add row</button></div>
+  <div class="ebody"><div id="implRows"></div></div>
+
+  <!-- Attachment filenames -->
+  <div class="eband"><span>Upload File</span></div>
+  <div class="ebody">
+    <label class="form-label" for="f_attach">Supporting evidence — one filename per line</label>
+    <textarea class="form-area" id="f_attach" placeholder="Courier domestic.xlsx">${esc((o.attachments||[]).join('\n'))}</textarea>
+    <div class="hint">These filenames print in the report’s <b>Upload File</b> band. The files themselves stay in your evidence folder.</div>
+  </div>`;
+
+  /* --- wire the plain fields --- */
+  const touch = ()=>{ S.dirty = true; queueSave(); };
+  $('#f_title').addEventListener('input', e=>{ o.title = e.target.value; touch(); });
+  $('#f_var').addEventListener('input', e=>{
+    o.value_at_risk = Number(e.target.value)||0;
+    $('#varEcho').textContent = inr(o.value_at_risk);
+    touch();
+  });
+  $('#f_attach').addEventListener('input', e=>{
+    o.attachments = e.target.value.split('\n').map(s=>s.trim()).filter(Boolean);
+    touch();
+  });
+  /* Yes/No segmented toggles. */
+  [['#f_repeat','repeat'],['#f_sysimp','system_improvement']].forEach(([sel,key])=>{
+    $$(sel+' button').forEach(b=> b.addEventListener('click', ()=>{
+      o[key] = b.dataset.v;
+      $$(sel+' button').forEach(x=>x.classList.toggle('on', x===b));
+      if (key === 'system_improvement') $('#sysEcho').textContent = o[key];
+      touch();
+    }));
+  });
+  /* Risk rating boxes. */
+  $$('#f_risk .riskbox').forEach(b=> b.addEventListener('click', ()=>{
+    o.risk_rating = b.dataset.v;
+    $$('#f_risk .riskbox').forEach(x=>x.classList.toggle('on', x===b));
+    touch();
+  }));
+  /* Tick matrices. */
+  $$('input[data-tag]').forEach(cb=> cb.addEventListener('change', ()=>{
+    const key = cb.dataset.tag;
+    o[key] = $$(`input[data-tag="${key}"]`).filter(x=>x.checked).map(x=>x.value);
+    touch();
+  }));
+  /* Rich-text bodies. */
+  [['f_background','background'],['f_observation','observation'],['f_root_cause','root_cause'],
+   ['f_business_impact','business_impact'],['f_recommendation','recommendation'],
+   ['f_management_response','management_response']].forEach(([id,key])=>{
+    rteInit(id, ()=>{ o[key] = sanitize($('#'+id).innerHTML); touch(); });
+  });
+
+  renderImplRows(ownerOpts);
+  $('#btnAddImpl').addEventListener('click', ()=>{
+    (o.implementation ||= []).push({owner:'', action_plan:'', timeline:''});
+    renderImplRows(ownerOpts); touch();
+  });
+}
+/* The Implementation Owner / Action Plan / Timeline repeater. */
+function renderImplRows(ownerOpts){
+  const o = S.ob;
+  o.implementation ||= [];
+  const host = $('#implRows');
+  if (!o.implementation.length){
+    host.innerHTML = `<div class="hint">No action plan rows yet — add one once management has committed an owner and a date.</div>`;
+    return;
+  }
+  host.innerHTML = o.implementation.map((r,i)=>`
+    <div class="implrow" data-i="${i}">
+      <div class="implhead"><span>Row ${i+1}</span><button class="btn sm dgr" data-rm="${i}">Remove</button></div>
+      <div class="esplit" style="grid-template-columns:1fr 170px;">
+        <div>
+          <label class="form-label">Implementation owner</label>
+          <select class="form-select" data-f="owner">${ownerOpts.replace(`<option>${esc(r.owner)}</option>`, `<option selected>${esc(r.owner)}</option>`)}</select>
+          <div style="height:10px;"></div>
+          <label class="form-label">Implementation action plan</label>
+          ${rteHTML('f_impl_'+i,'What will be done…', r.action_plan)}
+        </div>
+        <div>
+          <label class="form-label">Implementation timeline</label>
+          <input class="form-input" type="date" data-f="timeline" value="${esc(r.timeline||'')}">
+          <div class="hint">Prints as <b>${esc(longDate(r.timeline)||'—')}</b>.</div>
+        </div>
+      </div>
+    </div>`).join('');
+
+  $$('#implRows .implrow').forEach(el=>{
+    const i = +el.dataset.i;
+    el.querySelector('[data-rm]').addEventListener('click', ()=>{
+      o.implementation.splice(i,1); renderImplRows(ownerOpts); S.dirty=true; queueSave();
+    });
+    el.querySelector('[data-f="owner"]').addEventListener('change', e=>{
+      o.implementation[i].owner = e.target.value; S.dirty=true; queueSave();
+    });
+    el.querySelector('[data-f="timeline"]').addEventListener('change', e=>{
+      o.implementation[i].timeline = e.target.value; renderImplRows(ownerOpts); S.dirty=true; queueSave();
+    });
+    rteInit('f_impl_'+i, ()=>{
+      o.implementation[i].action_plan = sanitize($('#f_impl_'+i).innerHTML);
+      S.dirty = true; queueSave();
+    });
+  });
+}
+/* Debounced autosave so typing does not hit the Sheet on every keystroke. */
+let saveTimer = null;
+function queueSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveObsNow, 1500);
+}
+async function saveObsNow(){
+  if (!S.ob || !S.dirty) return;
+  try {
+    await Store.saveObs(S.ob);
+    S.dirty = false;
+    flag('Saved', 'ok');
+  } catch(e){
+    flag('Not saved: '+e.message, 'bad');
+  }
+}
+$('#btnSaveObs').addEventListener('click', async ()=>{
+  clearTimeout(saveTimer);
+  S.dirty = true;
+  await saveObsNow();
+  renderAudit(); show('scr-audit');
+});
+$('#btnDelObs').addEventListener('click', async ()=>{
+  if (!confirm('Delete this observation? This cannot be undone.')) return;
+  clearTimeout(saveTimer);
+  const id = S.ob.id;
+  try { await Store.deleteObs(id); } catch(e){ flag('Could not delete: '+e.message,'bad'); return; }
+  S.obs = S.obs.filter(o=>o.id!==id);
+  S.obs.forEach((o,k)=> o.seq = k+1);
+  try { await Promise.all(S.obs.map(o=>Store.saveObs(o))); } catch(e){}
+  S.ob = null; S.dirty = false;
+  renderAudit(); show('scr-audit');
+});
+/* Warn before leaving with unsaved keystrokes in flight. */
+window.addEventListener('beforeunload', e=>{ if (S.dirty){ e.preventDefault(); e.returnValue=''; } });
+
+/* ==========================================================================
+   REPORT BUILDER
+   Produces the exact markup the print stylesheet expects. One <section> per
+   observation; the footer is a single fixed element that Chrome repeats on
+   every sheet.
+   ========================================================================== */
+function buildReport(audit, obs){
+  const body = obs.map((o,i)=> reportObs(audit, o, i+1)).join('');
+  /* The <tfoot> is what makes the footer repeat on every printed page — see
+     the .pwrap comment in the stylesheet. */
+  return `<table class="pwrap">`
+       +   `<tfoot><tr><td><div class="pfoot">${esc(footerText(audit))}</div></td></tr></tfoot>`
+       +   `<tbody><tr><td>${body}</td></tr></tbody>`
+       + `</table>`;
+}
+function reportObs(audit, o, n){
+  const risk = o.risk_rating || 'L';
+  const boxes = ['C','H','M','L'].map(k=>`<span class="rb${k===risk?' on':''}">${k}</span>`).join('');
+
+  /* A gold band plus its body — skipped entirely when the body is empty, so a
+     half-finished observation does not print a stranded band. */
+  const band  = (label, right) =>
+    `<div class="pband"><span>${esc(label)}</span>${right?`<span>${esc(right)}</span>`:'<span></span>'}</div>`;
+  const sect  = (label, html, right) => blank(html) ? '' : band(label, right) + `<div class="pbody">${html}</div>`;
+  const sect2 = (label, html) => blank(html) ? '' : `<div class="pband2">${esc(label)}</div><div class="pbody">${html}</div>`;
+  const matrix = (title, opts, chosen) => `<table class="pmx">
+      <tr><th colspan="2">${esc(title)}</th></tr>
+      ${opts.map(x=>`<tr><td>${esc(x)}</td><td class="tk">${(chosen||[]).includes(x)?'&#10004;':''}</td></tr>`).join('')}
+    </table>`;
+
+  /* Implementation table — only printed when there is at least one row. */
+  const impl = (o.implementation||[]).filter(r=> r.owner || r.timeline || !blank(r.action_plan));
+  const implTable = !impl.length ? '' : `<table class="pimpl">
+      <tr><th class="c1">Implementation<br>Owner(s)</th><th class="c2">Implementation Action Plan</th><th class="c3">Implementation<br>Timeline</th></tr>
+      ${impl.map(r=>`<tr>
+        <td class="c1">${esc(r.owner||'')}</td>
+        <td class="c2">${r.action_plan||''}</td>
+        <td class="c3">${esc(longDate(r.timeline))}</td></tr>`).join('')}
+    </table>`;
+
+  const files = (o.attachments||[]).filter(Boolean);
+
+  return `<section class="pobs">
+    <div class="ptitle">Observation ${n}:<br>${esc(o.title||'')}</div>
+    <div class="prule"></div>
+    <div class="phdr">
+      <span class="ph-a">Background</span>
+      <span class="ph-b">Repeat: ${esc(o.repeat||'No')}</span>
+      <span class="ph-c">Value: INR ${inr(o.value_at_risk)}</span>
+      <span class="ph-d">Risk<br>Rating</span>
+      <span class="ph-e">${boxes}</span>
+    </div>
+    ${blank(o.background) ? '' : `<div class="pbody">${o.background}</div>`}
+    ${sect('Observation(s)', o.observation, 'System Improvement: '+(o.system_improvement||'No'))}
+    <div class="ptwo">
+      <div class="pcolL">
+        ${sect2('Root Cause(s)', o.root_cause)}
+        ${sect2('Business Impact(s)', o.business_impact)}
+        ${sect2('Recommendation(s)', o.recommendation)}
+      </div>
+      <div class="pcolR">
+        ${matrix('Root Cause',     CFG.ROOT_CAUSE, o.root_cause_tags)}
+        ${matrix('Impact',         CFG.IMPACT,     o.impact_tags)}
+        ${matrix('Recommendation', CFG.RECOMMEND,  o.recommendation_tags)}
+      </div>
+    </div>
+    ${sect('Management Response(s)', o.management_response)}
+    ${implTable}
+    ${band('Upload File')}
+    ${files.length ? `<div class="pbody">${files.map(f=>esc(f)).join('<br>')}</div>` : ''}
+  </section>`;
+}
+/* Render into #printroot, then either show the preview screen or print. */
+function renderReport(){
+  clearTimeout(saveTimer);
+  if (S.dirty) saveObsNow();
+  if (!S.obs.length){ flag('Add an observation first','bad'); return false; }
+  $('#printroot').innerHTML = buildReport(S.audit, S.obs);
+  document.title = footerText(S.audit);
+  return true;
+}
+$('#btnPreview').addEventListener('click', ()=>{ if (renderReport()) show('scr-preview'); });
+[$('#btnPrint'), $('#btnPrint2')].forEach(b=> b.addEventListener('click', ()=>{
+  if (renderReport()) setTimeout(()=>window.print(), 60);
+}));
+
+/* ==========================================================================
+   MODALS — New audit / audit details, and Settings (picklists).
+   ========================================================================== */
+const M = { ok:null };
+function openModal(title, bodyHTML, onOk, okLabel){
+  $('#modalTitle').textContent = title;
+  $('#modalBody').innerHTML = bodyHTML;
+  $('#modalOk').textContent = okLabel || 'Save';
+  M.ok = onOk;
+  $('#modal').classList.add('on');
+}
+function closeModal(){ $('#modal').classList.remove('on'); M.ok = null; }
+$('#modalCancel').addEventListener('click', closeModal);
+$('#modal').addEventListener('click', e=>{ if (e.target.id === 'modal') closeModal(); });
+$('#modalOk').addEventListener('click', async ()=>{ if (M.ok) await M.ok(); });
+
+/* Options list for a picklist, with the current value pre-selected. */
+function optList(items, val){
+  return ['<option value="">— select —</option>']
+    .concat((items||[]).map(x=>`<option ${x===val?'selected':''}>${esc(x)}</option>`)).join('');
+}
+function auditFormHTML(a){
+  return `
+  <div class="grid2">
+    <div class="form-group"><label class="form-label" for="m_code">Audit code <span style="color:var(--red)">*</span></label>
+      <input class="form-input" id="m_code" value="${esc(a.code)}" placeholder="58"></div>
+    <div class="form-group"><label class="form-label" for="m_location">Location <span style="color:var(--red)">*</span></label>
+      <input class="form-input" id="m_location" value="${esc(a.location)}" placeholder="Nalagarh"></div>
+  </div>
+  <div class="form-group"><label class="form-label" for="m_area">Audit area <span style="color:var(--red)">*</span></label>
+    <select class="form-select" id="m_area">${optList(S.config.areas, a.area)}</select></div>
+  <div class="grid2">
+    <div class="form-group"><label class="form-label" for="m_from">Period from</label>
+      <input class="form-input" type="date" id="m_from" value="${esc(a.period_from)}"></div>
+    <div class="form-group"><label class="form-label" for="m_to">Period to</label>
+      <input class="form-input" type="date" id="m_to" value="${esc(a.period_to)}"></div>
+  </div>
+  <div class="grid2">
+    <div class="form-group"><label class="form-label" for="m_status">Report status</label>
+      <select class="form-select" id="m_status">
+        <option ${a.status!=='Final'?'selected':''}>Draft</option>
+        <option ${a.status==='Final'?'selected':''}>Final</option>
+      </select>
+      <div class="hint">Sets the footer prefix — “<b>Draft</b> Report - …”.</div></div>
+    <div class="form-group"><label class="form-label" for="m_team">Audit team</label>
+      <input class="form-input" id="m_team" value="${esc(a.audit_team)}" placeholder="Names, comma separated"></div>
+  </div>
+  <div id="m_err"></div>
+  <div class="hint">Footer preview: <b id="m_foot"></b></div>`;
+}
+function wireAuditForm(a){
+  const upd = ()=>{
+    $('#m_foot').textContent = footerText({
+      code: $('#m_code').value.trim(), location: $('#m_location').value.trim(),
+      area: $('#m_area').value, status: $('#m_status').value
+    });
+  };
+  ['#m_code','#m_location','#m_area','#m_status'].forEach(s=>{
+    $(s).addEventListener('input', upd); $(s).addEventListener('change', upd);
+  });
+  upd();
+}
+function readAuditForm(a){
+  a.code = $('#m_code').value.trim();
+  a.location = $('#m_location').value.trim();
+  a.area = $('#m_area').value;
+  a.period_from = $('#m_from').value;
+  a.period_to = $('#m_to').value;
+  a.status = $('#m_status').value;
+  a.audit_team = $('#m_team').value.trim();
+  if (!a.code || !a.location || !a.area){
+    $('#m_err').innerHTML = '<div class="err">Audit code, location and area are all required — they make up the report footer.</div>';
+    return false;
+  }
+  return true;
+}
+$('#btnNewAudit').addEventListener('click', ()=>{
+  const a = newAudit();
+  openModal('New audit', auditFormHTML(a), async ()=>{
+    if (!readAuditForm(a)) return;
+    try { await Store.saveAudit(a); } catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
+    S.audits.push(a);
+    closeModal();
+    openAudit(a.id);
+  }, 'Create audit');
+  wireAuditForm(a);
+});
+$('#btnEditAudit').addEventListener('click', ()=>{
+  const a = S.audit;
+  openModal('Audit details', auditFormHTML(a) + `
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;">
+      <button class="btn dgr" id="m_del">Delete this audit and all its observations</button>
+    </div>`, async ()=>{
+    if (!readAuditForm(a)) return;
+    try { await Store.saveAudit(a); } catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
+    closeModal(); renderAudit();
+  });
+  wireAuditForm(a);
+  $('#m_del').addEventListener('click', async ()=>{
+    if (!confirm(`Delete audit ${a.code} and all ${S.obs.length} observation(s)? This cannot be undone.`)) return;
+    try { await Store.deleteAudit(a.id); } catch(e){ flag('Could not delete: '+e.message,'bad'); return; }
+    S.audits = S.audits.filter(x=>x.id!==a.id);
+    closeModal(); loadList();
+  });
+});
+/* Settings — the admin-editable picklists behind Audit area / Owner.
+   Location is free text on the audit form, so it has no list here. */
+$('#btnSettings').addEventListener('click', ()=>{
+  const c = S.config;
+  openModal('Settings', `
+    <div class="hint" style="margin-bottom:14px;">One value per line. These fill the Audit area and Implementation owner dropdowns.</div>
+    <div class="form-group"><label class="form-label" for="s_areas">Audit areas</label>
+      <textarea class="form-area" id="s_areas" rows="6">${esc((c.areas||[]).join('\n'))}</textarea></div>
+    <div class="form-group"><label class="form-label" for="s_owners">Implementation owners</label>
+      <textarea class="form-area" id="s_owners" rows="5">${esc((c.owners||[]).join('\n'))}</textarea></div>
+    <div id="m_err"></div>`, async ()=>{
+    const lines = id => $('#'+id).value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const next = { areas:lines('s_areas'), owners:lines('s_owners') };
+    try { await Store.saveConfig(next); } catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
+    S.config = next;
+    closeModal(); flag('Settings saved','ok');
+  });
+});
+
+/* ==========================================================================
+   STARTUP — resume an existing session if there is one.
+   ========================================================================== */
+if (Store.resume()) boot().catch(()=>{ show('scr-auth'); });
+else show('scr-auth');
+</script>
+</body>
+</html>

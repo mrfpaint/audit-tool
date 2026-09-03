@@ -18,6 +18,11 @@ Admin audit.pdf
 *.csv
 ~$*
 
+# Generated secrets, kept locally so they survive the setup steps. Never commit.
+secrets.local.txt
+*.local.txt
+*.secret
+
 # Wrangler / Node
 .wrangler/
 node_modules/

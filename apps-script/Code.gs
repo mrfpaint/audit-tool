@@ -143,9 +143,16 @@ function decodeField(col, v) {
     try { return JSON.parse(v || '[]'); } catch (e) { return []; }
   }
   if (col === 'value_at_risk' || col === 'seq') return Number(v) || 0;
-  /* Dates typed into the sheet by hand come back as Date objects — normalise
-     them to the yyyy-MM-dd the app's <input type="date"> expects. */
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  /* Sheets silently converts a "2023-04-01" string into a real date on write,
+     so period_from/period_to come back as Date objects. Normalise them to the
+     yyyy-MM-dd that <input type="date"> expects, or the app shows an empty
+     date picker and the audit list prints a full JS date string.
+     Duck-typed on getTime rather than `v instanceof Date`: the Apps Script
+     values arrive from a different realm, where instanceof does not hold, so
+     the earlier instanceof check silently fell through to String(v). */
+  if (v && typeof v.getTime === 'function') {
+    return Utilities.formatDate(new Date(v.getTime()), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
   return v === null || v === undefined ? '' : String(v);
 }
 

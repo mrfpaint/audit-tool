@@ -416,7 +416,7 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
    to share audits across the team. See SETUP.md.
    ========================================================================== */
 const CFG = {
-  API: '',                                     // e.g. 'https://mrf-audit-tool.jofran81.workers.dev'
+  API: 'https://mrf-audit-tool.jofran81.workers.dev',   // '' = local browser storage only
   ORG: 'MRF Corp Limited',
   RISK: {C:'Critical', H:'High', M:'Medium', L:'Low'},
   ROOT_CAUSE:  ['People','Process','Technology'],
@@ -969,8 +969,15 @@ function renderAudit(){
         if (j<0 || j>=S.obs.length) return;
         [S.obs[i], S.obs[j]] = [S.obs[j], S.obs[i]];
         S.obs.forEach((o,k)=> o.seq = k+1);
-        renderAudit();
-        try { await Promise.all([Store.saveObs(S.obs[i]), Store.saveObs(S.obs[j])]); flag('Order saved','ok'); }
+        renderAudit();                       // reorder shows immediately
+        /* Sequential, not Promise.all: a round trip is ~3s and two concurrent
+           Apps Script calls can interleave on the same sheet. Repeated clicks
+           are absorbed because each write sends that row's current seq. */
+        try {
+          await Store.saveObs(S.obs[i]);
+          await Store.saveObs(S.obs[j]);
+          flag('Order saved','ok');
+        }
         catch(e){ flag('Could not save order: '+e.message,'bad'); }
       });
     });
@@ -1191,22 +1198,36 @@ function renderImplRows(ownerOpts){
 let saveTimer = null;
 function queueSave(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveObsNow, 1500);
+  saveTimer = setTimeout(saveObsNow, 2500);
 }
-async function saveObsNow(){
-  if (!S.ob || !S.dirty) return;
-  try {
-    await Store.saveObs(S.ob);
-    S.dirty = false;
-    flag('Saved', 'ok');
-  } catch(e){
-    flag('Not saved: '+e.message, 'bad');
-  }
+/* A save through the Worker to the Sheet takes ~3s, which is longer than the
+   autosave debounce. Two saves could therefore be in flight at once and finish
+   out of order, letting an older snapshot land last and silently undo the
+   newest edits. Every write is chained onto the previous one so they apply in
+   the order they were made, however slow the round trip is. */
+let saveChain = Promise.resolve();
+function saveObsNow(){
+  clearTimeout(saveTimer);
+  if (!S.ob || !S.dirty) return saveChain;
+  const ob = S.ob;
+  S.dirty = false;               // edits made from here on re-dirty and re-queue
+  saveChain = saveChain.then(async ()=>{
+    try {
+      await Store.saveObs(ob);
+      flag('Saved', 'ok');
+    } catch(e){
+      S.dirty = true;            // keep it dirty so the next flush retries
+      flag('Not saved: '+e.message, 'bad');
+    }
+  });
+  return saveChain;
 }
 $('#btnSaveObs').addEventListener('click', async ()=>{
-  clearTimeout(saveTimer);
+  const btn = $('#btnSaveObs');
+  btn.disabled = true; btn.textContent = 'Saving…';
   S.dirty = true;
-  await saveObsNow();
+  await saveObsNow();            // resolves only once the write has landed
+  btn.disabled = false; btn.textContent = 'Save';
   renderAudit(); show('scr-audit');
 });
 $('#btnDelObs').addEventListener('click', async ()=>{
@@ -1216,7 +1237,10 @@ $('#btnDelObs').addEventListener('click', async ()=>{
   try { await Store.deleteObs(id); } catch(e){ flag('Could not delete: '+e.message,'bad'); return; }
   S.obs = S.obs.filter(o=>o.id!==id);
   S.obs.forEach((o,k)=> o.seq = k+1);
-  try { await Promise.all(S.obs.map(o=>Store.saveObs(o))); } catch(e){}
+  /* Re-numbering the remaining observations is N writes; run them one at a
+     time rather than with Promise.all, which fired N concurrent Apps Script
+     calls that could interleave. */
+  try { for (const o of S.obs) await Store.saveObs(o); } catch(e){}
   S.ob = null; S.dirty = false;
   renderAudit(); show('scr-audit');
 });

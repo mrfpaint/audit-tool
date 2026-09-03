@@ -16,6 +16,12 @@
  *   Config         two columns: key | value  (newline-separated picklists)
  */
 
+/* Bump on every change. `{"action":"version"}` returns it, which is the only
+   way to tell from outside whether a redeploy actually took effect — the
+   /exec URL is pinned to a deployment version, so editing the code here and
+   pressing Save changes nothing until a NEW VERSION is deployed. */
+var VERSION = 3;
+
 var AUDIT_COLS = ['id','code','location','area','period_from','period_to',
                   'status','audit_team','created_at','updated_at'];
 
@@ -28,6 +34,9 @@ var OBS_COLS = ['id','audit_id','seq','title','repeat','value_at_risk','risk_rat
 /* Fields stored as a delimited list, and as JSON, respectively. */
 var LIST_FIELDS = ['root_cause_tags','impact_tags','recommendation_tags','attachments'];
 var JSON_FIELDS = ['implementation'];
+/* Columns holding a plain yyyy-MM-dd date. Sheets turns such a string into a
+   real date value on write, so these need normalising on the way back out. */
+var DATE_FIELDS = ['period_from','period_to'];
 
 function doPost(e) {
   try {
@@ -36,6 +45,7 @@ function doPost(e) {
     if (!expected || body.bridgeToken !== expected) return out({ error: 'Unauthorized' });
 
     switch (body.action) {
+      case 'version':     return out({ version: VERSION });
       case 'config':      return out({ config: readConfig() });
       case 'saveConfig':  writeConfig(body.config || {});      return out({ ok: true });
       case 'listAudits':  return out({ audits: readRows('Audits', AUDIT_COLS) });
@@ -143,17 +153,27 @@ function decodeField(col, v) {
     try { return JSON.parse(v || '[]'); } catch (e) { return []; }
   }
   if (col === 'value_at_risk' || col === 'seq') return Number(v) || 0;
-  /* Sheets silently converts a "2023-04-01" string into a real date on write,
-     so period_from/period_to come back as Date objects. Normalise them to the
-     yyyy-MM-dd that <input type="date"> expects, or the app shows an empty
-     date picker and the audit list prints a full JS date string.
-     Duck-typed on getTime rather than `v instanceof Date`: the Apps Script
-     values arrive from a different realm, where instanceof does not hold, so
-     the earlier instanceof check silently fell through to String(v). */
-  if (v && typeof v.getTime === 'function') {
-    return Utilities.formatDate(new Date(v.getTime()), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  }
+  /* Sheets converts a "2023-04-01" string into a real date value on write, so
+     these columns come back as something other than the string that went in.
+     Normalise by column name rather than by sniffing the value's type: an
+     earlier `v instanceof Date` check and a `typeof v.getTime` check both
+     failed to match, so the type of these values is not something to rely on.
+     new Date(...) accepts a Date, a date string or an epoch number alike. */
+  if (DATE_FIELDS.indexOf(col) >= 0) return toISODate(v);
   return v === null || v === undefined ? '' : String(v);
+}
+
+/* Anything date-shaped -> "yyyy-MM-dd", or '' when it is not a real date.
+   Already-correct strings are returned untouched so a value never drifts by a
+   day through repeated timezone conversions. */
+function toISODate(v) {
+  if (v === null || v === undefined || v === '') return '';
+  var str = String(v);
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (m) return str;
+  var d = new Date(v);
+  if (!d || isNaN(d.getTime())) return '';
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
 /* ------------------------------------------------------------------ config */

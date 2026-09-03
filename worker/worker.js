@@ -26,6 +26,7 @@ const TOKEN_TTL_SECONDS = 8 * 60 * 60;   // 8 hours, matching the Agreement Dash
 /* Actions the browser may invoke. Anything not listed is rejected outright, so
    a new Apps Script handler is never reachable until it is named here. */
 const ACTIONS = new Set([
+  'version',                     // reports the deployed Apps Script version
   'config', 'saveConfig',
   'listAudits', 'saveAudit', 'deleteAudit',
   'listObs', 'saveObs', 'deleteObs'

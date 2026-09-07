@@ -245,11 +245,12 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .pmx td{border:.6pt solid #808080;padding:3.2pt 1.8pt;font-size:9.6pt;vertical-align:middle;}
 .pmx td.tk{width:20.9pt;text-align:center;font-weight:bold;font-size:11pt;}
 /* IMPLEMENTATION TABLE — 3 columns at the widths measured in the source:
-   owners 77.7pt, action plan 360.3pt, timeline 77.1pt. */
+   the three short typed fields plus the action plan, still totalling the
+   source table's 517.4pt width. */
 .pimpl{border-collapse:collapse;margin:9pt 0 0 4.2pt;width:517.4pt;table-layout:fixed;}
 .pimpl th{background:var(--gold);font-weight:bold;text-align:left;vertical-align:top;padding:3.6pt 4.2pt;border:.6pt solid var(--gold);}
 .pimpl td{padding:5pt 4.2pt;vertical-align:top;border:.6pt solid #fff;}
-.pimpl .c1{width:77.7pt;} .pimpl .c2{width:360.3pt;} .pimpl .c3{width:77.1pt;}
+.pimpl .c1{width:85pt;} .pimpl .c2{width:70pt;} .pimpl .c3{width:285pt;} .pimpl .c4{width:77.4pt;}
 .pimpl ol,.pimpl ul{margin:0 0 0 14pt;padding:0;}
 /* DATA TABLES typed by the auditor inside a section body. Same 9.6pt Arial as
    the surrounding text, which is what the source used. */
@@ -321,7 +322,6 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
   </div>
   <div class="hr">
     <span class="ubadge" id="storeBadge"></span>
-    <button class="bso" id="btnSettings">Settings</button>
     <button class="bso" id="btnOut">Sign out</button>
   </div>
 </div>
@@ -426,9 +426,6 @@ const CFG = {
   RECOMMEND:   ['People','Process','Technology'],
   /* Seed picklists. Once a Worker is connected these come from the Config tab
      of the Sheet and are editable in Settings. */
-  SEED_CONFIG: {
-    owners: ['Manoj Sharma ( Head Com Nalagarh)']
-  }
 };
 
 /* ==========================================================================
@@ -546,7 +543,7 @@ const LS = 'auditTool.v1';
 const Local = {
   read(){ try { return JSON.parse(lsGet(LS)) || {}; } catch(e){ return {}; } },
   write(d){ lsSet(LS, JSON.stringify(d)); },
-  db(){ const d = this.read(); d.audits ||= []; d.obs ||= []; d.config ||= JSON.parse(JSON.stringify(CFG.SEED_CONFIG)); return d; }
+  db(){ const d = this.read(); d.audits ||= []; d.obs ||= []; return d; }
 };
 const Store = {
   mode: CFG.API ? 'remote' : 'local',
@@ -586,14 +583,6 @@ const Store = {
     return false;
   },
 
-  async getConfig(){
-    if (this.mode === 'local') return Local.db().config;
-    return (await this.call('config')).config;
-  },
-  async saveConfig(config){
-    if (this.mode === 'local'){ const d = Local.db(); d.config = config; Local.write(d); return; }
-    await this.call('saveConfig', {config});
-  },
   async listAudits(){
     if (this.mode === 'local') return Local.db().audits;
     return (await this.call('listAudits')).audits || [];
@@ -646,7 +635,7 @@ const Store = {
 /* ==========================================================================
    APP STATE
    ========================================================================== */
-const S = { config:null, audits:[], audit:null, obs:[], ob:null, dirty:false };
+const S = { audits:[], audit:null, obs:[], ob:null, dirty:false };
 
 /* Blank records — the shape of an audit and of an observation. */
 function newAudit(){
@@ -875,13 +864,8 @@ $('#btnOut').addEventListener('click', ()=>{
 async function boot(){
   $('#appHeader').style.display = 'flex';
   $('#storeBadge').textContent = Store.mode === 'local' ? 'Local browser storage' : 'Shared workspace';
-  try {
-    S.config = await Store.getConfig();
-  } catch(e){
-    S.config = JSON.parse(JSON.stringify(CFG.SEED_CONFIG));
-    flag('Could not load settings — using defaults', 'bad');
-  }
-  ['owners'].forEach(k=> S.config[k] ||= []);
+  /* Every field in the app is typed, so there are no picklists to fetch -
+     which also keeps one Apps Script round trip out of sign-in. */
   await loadList();
 }
 
@@ -1017,9 +1001,6 @@ function renderObsForm(){
   $('#obTitleHead').textContent = 'Observation ' + (i+1);
   $('#obSub').textContent = `${S.audit.depot_code||'—'} · ${S.audit.location||''} · ${S.audit.region||''}`;
 
-  const ownerOpts = ['<option value="">— select owner —</option>']
-    .concat((S.config.owners||[]).map(n=>`<option>${esc(n)}</option>`)).join('');
-
   $('#obsForm').innerHTML = `
   <!-- Title + header-band fields -->
   <div class="eband"><span>Observation heading &amp; risk</span></div>
@@ -1144,50 +1125,57 @@ function renderObsForm(){
     rteInit(id, ()=>{ o[key] = sanitize($('#'+id).innerHTML); touch(); });
   });
 
-  renderImplRows(ownerOpts);
+  renderImplRows();
   $('#btnAddImpl').addEventListener('click', ()=>{
-    (o.implementation ||= []).push({owner:'', action_plan:'', timeline:''});
-    renderImplRows(ownerOpts); touch();
+    (o.implementation ||= []).push({responsible:'', designation:'', action_plan:'', target_date:''});
+    renderImplRows(); touch();
   });
 }
 /* The Implementation Owner / Action Plan / Timeline repeater. */
-function renderImplRows(ownerOpts){
+function renderImplRows(){
   const o = S.ob;
   o.implementation ||= [];
   const host = $('#implRows');
   if (!o.implementation.length){
-    host.innerHTML = `<div class="hint">No action plan rows yet — add one once management has committed an owner and a date.</div>`;
+    host.innerHTML = `<div class="hint">No action plan rows yet — add one once management has committed a person and a target date.</div>`;
     return;
   }
   host.innerHTML = o.implementation.map((r,i)=>`
     <div class="implrow" data-i="${i}">
       <div class="implhead"><span>Row ${i+1}</span><button class="btn sm dgr" data-rm="${i}">Remove</button></div>
-      <div class="esplit" style="grid-template-columns:1fr 170px;">
-        <div>
-          <label class="form-label">Implementation owner</label>
-          <select class="form-select" data-f="owner">${ownerOpts.replace(`<option>${esc(r.owner)}</option>`, `<option selected>${esc(r.owner)}</option>`)}</select>
-          <div style="height:10px;"></div>
-          <label class="form-label">Implementation action plan</label>
-          ${rteHTML('f_impl_'+i,'What will be done…', r.action_plan)}
+      <div class="grid3">
+        <div class="form-group">
+          <label class="form-label">Responsible Persons</label>
+          <input class="form-input" data-f="responsible" value="${esc(r.responsible||'')}" placeholder="Manoj Sharma">
         </div>
-        <div>
-          <label class="form-label">Implementation timeline</label>
-          <input class="form-input" type="date" data-f="timeline" value="${esc(r.timeline||'')}">
-          <div class="hint">Prints as <b>${esc(longDate(r.timeline)||'—')}</b>.</div>
+        <div class="form-group">
+          <label class="form-label">Designation</label>
+          <input class="form-input" data-f="designation" value="${esc(r.designation||'')}" placeholder="Head Commercial">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Date</label>
+          <input class="form-input" type="date" data-f="target_date" value="${esc(r.target_date||'')}">
+          <div class="hint">Prints as <b>${esc(longDate(r.target_date)||'—')}</b>.</div>
         </div>
       </div>
+      <label class="form-label">Implementation action plan</label>
+      ${rteHTML('f_impl_'+i,'What will be done…', r.action_plan)}
     </div>`).join('');
 
   $$('#implRows .implrow').forEach(el=>{
     const i = +el.dataset.i;
     el.querySelector('[data-rm]').addEventListener('click', ()=>{
-      o.implementation.splice(i,1); renderImplRows(ownerOpts); S.dirty=true; queueSave();
+      o.implementation.splice(i,1); renderImplRows(); S.dirty=true; queueSave();
     });
-    el.querySelector('[data-f="owner"]').addEventListener('change', e=>{
-      o.implementation[i].owner = e.target.value; S.dirty=true; queueSave();
+    /* Typed fields save on input; only the date re-renders, to refresh the
+       "Prints as March 31, 2024" hint underneath it. */
+    ['responsible','designation'].forEach(f=>{
+      el.querySelector('[data-f="'+f+'"]').addEventListener('input', e=>{
+        o.implementation[i][f] = e.target.value; S.dirty=true; queueSave();
+      });
     });
-    el.querySelector('[data-f="timeline"]').addEventListener('change', e=>{
-      o.implementation[i].timeline = e.target.value; renderImplRows(ownerOpts); S.dirty=true; queueSave();
+    el.querySelector('[data-f="target_date"]').addEventListener('change', e=>{
+      o.implementation[i].target_date = e.target.value; renderImplRows(); S.dirty=true; queueSave();
     });
     rteInit('f_impl_'+i, ()=>{
       o.implementation[i].action_plan = sanitize($('#f_impl_'+i).innerHTML);
@@ -1279,13 +1267,14 @@ function reportObs(audit, o, n){
     </table>`;
 
   /* Implementation table — only printed when there is at least one row. */
-  const impl = (o.implementation||[]).filter(r=> r.owner || r.timeline || !blank(r.action_plan));
+  const impl = (o.implementation||[]).filter(r=> r.responsible || r.designation || r.target_date || !blank(r.action_plan));
   const implTable = !impl.length ? '' : `<table class="pimpl">
-      <tr><th class="c1">Implementation<br>Owner(s)</th><th class="c2">Implementation Action Plan</th><th class="c3">Implementation<br>Timeline</th></tr>
+      <tr><th class="c1">Responsible<br>Persons</th><th class="c2">Designation</th><th class="c3">Implementation Action Plan</th><th class="c4">Target Date</th></tr>
       ${impl.map(r=>`<tr>
-        <td class="c1">${esc(r.owner||'')}</td>
-        <td class="c2">${r.action_plan||''}</td>
-        <td class="c3">${esc(longDate(r.timeline))}</td></tr>`).join('')}
+        <td class="c1">${esc(r.responsible||'')}</td>
+        <td class="c2">${esc(r.designation||'')}</td>
+        <td class="c3">${r.action_plan||''}</td>
+        <td class="c4">${esc(longDate(r.target_date))}</td></tr>`).join('')}
     </table>`;
 
   const files = (o.attachments||[]).filter(Boolean);
@@ -1433,22 +1422,6 @@ $('#btnEditAudit').addEventListener('click', ()=>{
     try { await Store.deleteAudit(a.id); } catch(e){ flag('Could not delete: '+e.message,'bad'); return; }
     S.audits = S.audits.filter(x=>x.id!==a.id);
     closeModal(); loadList();
-  });
-});
-/* Settings — the Implementation owner picklist. Depot Code, Location and
-   Region are all typed on the audit form, so none of them has a list. */
-$('#btnSettings').addEventListener('click', ()=>{
-  const c = S.config;
-  openModal('Settings', `
-    <div class="hint" style="margin-bottom:14px;">One value per line. Fills the Implementation owner dropdown in the observation editor.</div>
-    <div class="form-group"><label class="form-label" for="s_owners">Implementation owners</label>
-      <textarea class="form-area" id="s_owners" rows="5">${esc((c.owners||[]).join('\n'))}</textarea></div>
-    <div id="m_err"></div>`, async ()=>{
-    const lines = id => $('#'+id).value.split('\n').map(s=>s.trim()).filter(Boolean);
-    const next = { owners:lines('s_owners') };
-    try { await Store.saveConfig(next); } catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
-    S.config = next;
-    closeModal(); flag('Settings saved','ok');
   });
 });
 

@@ -38,7 +38,8 @@ lands:
 - **Business Impact(s)** — text, plus ticks for Operational / Financial / Compliance / Reputational
 - **Recommendation(s)** — text, plus ticks for People / Process / Technology
 - **Management Response(s)** — rich text
-- **Implementation** — one or more rows of Owner / Action Plan / Timeline
+- **Implementation** — one or more rows of Responsible Persons / Designation /
+  Action Plan / Target Date
 - **Upload File** — the filenames of your supporting evidence
 
 Every rich-text box supports **bold, italic, underline, bullet lists, numbered
@@ -81,15 +82,20 @@ headless Chrome and comparing coordinates against the original:
 | Risk boxes C/H/M/L | x 483.2 / 503.5 / 523.8 / 545.9 | x 483.8 / 503.9 / 524.0 / 545.2 |
 | Left column | x 36.3, w 400.3 | x 36.0, w 400.5 |
 | Right column (matrices) | x 440.2, w 119.5 | x 440.2, w 119.2 |
-| Implementation table | cols 77.7 / 360.3 / 77.1 | cols 78.0 / 361.5 / 77.2 |
+| Implementation table | 3 cols, 77.7 / 360.3 / 77.1 | 4 cols, 84.8 / 70.5 / 285.0 / 77.2 |
 | Body paragraph indent | x 37.5 | x 37.5 |
 | List text indent | x 61.4 | x 61.4 |
 | Footer | x 28.7, y 814.5, 13.5 pt | x 34.5, y 797.0, 13.5 pt |
 
-Two wording changes from the source: the header band reads **Value: INR n**
-(the source said "Value at Risk"), and the footer's third segment is the depot's
-**Region** rather than the audit area the original carried there — so a footer
-now reads `58_Nalagarh_North`, not `58_Nalagarh_Administration Control`.
+Three deliberate changes from the source:
+
+- the header band reads **Value: INR n** (the source said "Value at Risk")
+- the footer's third segment is the depot's **Region**, not the audit area the
+  original carried there — footers read `58_Nalagarh_North`, not
+  `58_Nalagarh_Administration Control`
+- the Implementation table has **four** columns rather than three: Designation
+  was added, and Owner(s) / Timeline became Responsible Persons / Target Date.
+  The four widths still total the source table's 517.4pt.
 
 Everything lands within about a point, except the footer, which sits ~17 pt higher
 and 6 pt further right. That was a deliberate trade: the only footer offset Blink
@@ -147,9 +153,9 @@ Three tabs, created automatically on first use:
 - **Observations** — one row per observation; the rich-text sections are stored as
   HTML in single cells, tick selections as pipe-separated lists, implementation
   rows as JSON
-- **Config** — `key | value` pairs holding the Implementation owner picklist,
-  one value per line. Editable in-app under **Settings**, or directly in the
-  sheet. Depot Code, Location and Region are typed, so they have no lists.
+- **Config** — created by the script but no longer used. Every field in the app
+  is typed free text, so there are no picklists left to store. The tab is
+  harmless; leave it or delete it.
 
 Because section bodies are HTML that round-trips through the sheet, everything is
 sanitised on the way in: only the tags the report uses survive, and all

@@ -539,6 +539,22 @@ function blank(html){
    the tool works with no backend at all; REMOTE talks to the Cloudflare Worker
    which holds the signed token and is the only thing that can reach the Sheet.
    ========================================================================== */
+/* Bring an observation loaded from storage up to the current field names.
+   Implementation rows were once {owner, action_plan, timeline}; they are now
+   {responsible, designation, action_plan, target_date}. Without this, rows
+   saved before that change would read back with an empty name and date -
+   silently losing what management had committed to. The row is rewritten in
+   place, so the next save persists it in the new shape. */
+function migrateObs(o){
+  (o.implementation || []).forEach(r=>{
+    if (r.responsible === undefined && r.owner !== undefined)    r.responsible = r.owner;
+    if (r.target_date === undefined && r.timeline !== undefined) r.target_date = r.timeline;
+    if (r.designation === undefined) r.designation = '';
+    delete r.owner; delete r.timeline;
+  });
+  return o;
+}
+
 const LS = 'auditTool.v1';
 const Local = {
   read(){ try { return JSON.parse(lsGet(LS)) || {}; } catch(e){ return {}; } },
@@ -610,6 +626,7 @@ const Store = {
     let rows;
     if (this.mode === 'local') rows = Local.db().obs.filter(o=>o.audit_id===auditId);
     else rows = (await this.call('listObs', {auditId})).observations || [];
+    rows.forEach(migrateObs);
     return rows.sort((a,b)=>(a.seq||0)-(b.seq||0));
   },
   async saveObs(o){

@@ -20,9 +20,9 @@
    way to tell from outside whether a redeploy actually took effect — the
    /exec URL is pinned to a deployment version, so editing the code here and
    pressing Save changes nothing until a NEW VERSION is deployed. */
-var VERSION = 3;
+var VERSION = 4;
 
-var AUDIT_COLS = ['id','code','location','area','period_from','period_to',
+var AUDIT_COLS = ['id','depot_code','location','region','period_from','period_to',
                   'status','audit_team','created_at','updated_at'];
 
 var OBS_COLS = ['id','audit_id','seq','title','repeat','value_at_risk','risk_rating',
@@ -75,6 +75,21 @@ function tab(name, cols) {
   var sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    return sh;
+  }
+  /* Data rows are addressed positionally, so a stale header row does not break
+     reads - but after a column rename it misleads anyone reading the sheet
+     directly. Rewrite row 1 whenever it no longer matches cols. */
+  var width = Math.max(cols.length, sh.getLastColumn());
+  var head = sh.getRange(1, 1, 1, width).getValues()[0];
+  var same = head.length >= cols.length;
+  for (var i = 0; same && i < cols.length; i++) {
+    if (String(head[i]) !== cols[i]) same = false;
+  }
+  if (!same) {
+    sh.getRange(1, 1, 1, width).clearContent();
     sh.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
@@ -181,7 +196,7 @@ function toISODate(v) {
 function readConfig() {
   var sh = tab('Config', ['key', 'value']);
   var last = sh.getLastRow();
-  var cfg = { areas: [], owners: [] };   // Location is free text, so it has no list
+  var cfg = { owners: [] };   // depot code / location / region are all typed, so no lists
   if (last < 2) return cfg;
   sh.getRange(2, 1, last - 1, 2).getValues().forEach(function (r) {
     var k = String(r[0]).trim();

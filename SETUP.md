@@ -139,9 +139,9 @@ curl -X POST https://<your-worker>.workers.dev/api \
 
 ## Housekeeping
 
-- The picklists behind Audit area and Implementation owner live in the sheet's
-  **Config** tab and are editable in-app under **Settings**. Location is free
-  text on the audit form, so it has no list.
+- The Implementation owner picklist lives in the sheet's **Config** tab and is
+  editable in-app under **Settings**. Depot Code, Location and Region are all
+  typed on the audit form, so none of them has a list.
 - Observation bodies are HTML in a single cell. Editing them by hand in the sheet
   works but is easy to break — prefer the app.
 - Google caps a cell at 50,000 characters, which is far more than an observation

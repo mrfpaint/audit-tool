@@ -14,15 +14,16 @@ One screen per job:
 
 | Screen | Purpose |
 |---|---|
-| Audits | every audit, searchable by code / location / area, each with a Draft or Final badge |
+| Audits | every audit, searchable by depot code / location / region, each with a Draft or Final badge |
 | Audit workspace | the observations in one audit — reorder, add, delete, preview, export |
 | Observation editor | all report fields, laid out in the same order they print |
 | Report preview | the finished report at true A4 width, then **Export PDF** |
 
-An audit is identified by **code + location + area**, which is also what the report
-footer is built from — `58` + `Nalagarh` + `Administration Control` prints as
-`Draft Report - 58_Nalagarh_Administration Control`. Switching the audit's status
-to Final changes the footer to `Final Report - …`.
+An audit is identified by its **Depot Details** — **Depot Code + Location +
+Region**, all typed free-text — which is also what the report footer is built
+from: `58` + `Nalagarh` + `North` prints as `Draft Report - 58_Nalagarh_North`.
+Switching the audit's status to Final changes the footer to `Final Report - …`.
+A segment left blank is dropped rather than leaving a stray underscore.
 
 ## The observation fields
 
@@ -85,8 +86,10 @@ headless Chrome and comparing coordinates against the original:
 | List text indent | x 61.4 | x 61.4 |
 | Footer | x 28.7, y 814.5, 13.5 pt | x 34.5, y 797.0, 13.5 pt |
 
-The header band reads **Value: INR n** (the source said "Value at Risk"), and the
-first footer segment is the audit's free-text **Location**.
+Two wording changes from the source: the header band reads **Value: INR n**
+(the source said "Value at Risk"), and the footer's third segment is the depot's
+**Region** rather than the audit area the original carried there — so a footer
+now reads `58_Nalagarh_North`, not `58_Nalagarh_Administration Control`.
 
 Everything lands within about a point, except the footer, which sits ~17 pt higher
 and 6 pt further right. That was a deliberate trade: the only footer offset Blink
@@ -144,9 +147,9 @@ Three tabs, created automatically on first use:
 - **Observations** — one row per observation; the rich-text sections are stored as
   HTML in single cells, tick selections as pipe-separated lists, implementation
   rows as JSON
-- **Config** — `key | value` pairs holding the Audit area and Implementation
-  owner picklists, one value per line. Editable in-app under
-  **Settings**, or directly in the sheet.
+- **Config** — `key | value` pairs holding the Implementation owner picklist,
+  one value per line. Editable in-app under **Settings**, or directly in the
+  sheet. Depot Code, Location and Region are typed, so they have no lists.
 
 Because section bodies are HTML that round-trips through the sheet, everything is
 sanitised on the way in: only the tags the report uses survive, and all

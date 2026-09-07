@@ -176,6 +176,8 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .modal.on{display:flex;}
 .modalbox{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:92vh;overflow-y:auto;}
 .modaltitle{font-family:'Rajdhani',sans-serif;font-size:21px;font-weight:700;color:var(--dark);margin-bottom:16px;}
+/* Sub-heading that groups related fields inside a modal (e.g. Depot Details). */
+.fsec{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--dark);border-bottom:2px solid var(--gold);padding-bottom:5px;margin:2px 0 14px;letter-spacing:.3px;}
 
 /* ==========================================================================
    ####  REPORT / PRINT STYLES  ####
@@ -425,7 +427,6 @@ const CFG = {
   /* Seed picklists. Once a Worker is connected these come from the Config tab
      of the Sheet and are editable in Settings. */
   SEED_CONFIG: {
-    areas:  ['Administration Control','Procurement','Stores & Inventory','Finance & Accounts','Human Resources','Sales & Marketing','Production','Maintenance'],
     owners: ['Manoj Sharma ( Head Com Nalagarh)']
   }
 };
@@ -649,7 +650,7 @@ const S = { config:null, audits:[], audit:null, obs:[], ob:null, dirty:false };
 
 /* Blank records — the shape of an audit and of an observation. */
 function newAudit(){
-  return { id:uid(), code:'', location:'', area:'', period_from:'', period_to:'',
+  return { id:uid(), depot_code:'', location:'', region:'', period_from:'', period_to:'',
            status:'Draft', audit_team:'', created_at:new Date().toISOString(), updated_at:'' };
 }
 function newObs(auditId, seq){
@@ -664,7 +665,7 @@ function newObs(auditId, seq){
 }
 /* The footer line, e.g. "Draft Report - 58_Nalagarh_Administration Control". */
 function footerText(a){
-  const parts = [a.code, a.location, a.area].filter(Boolean).join('_');
+  const parts = [a.depot_code, a.location, a.region].filter(Boolean).join('_');
   return `${a.status||'Draft'} Report - ${parts}`;
 }
 
@@ -880,7 +881,7 @@ async function boot(){
     S.config = JSON.parse(JSON.stringify(CFG.SEED_CONFIG));
     flag('Could not load settings — using defaults', 'bad');
   }
-  ['areas','owners'].forEach(k=> S.config[k] ||= []);
+  ['owners'].forEach(k=> S.config[k] ||= []);
   await loadList();
 }
 
@@ -897,7 +898,7 @@ $('#listSearch').addEventListener('input', renderList);
 function renderList(){
   const q = $('#listSearch').value.trim().toLowerCase();
   const rows = S.audits
-    .filter(a => !q || [a.code,a.location,a.area].join(' ').toLowerCase().includes(q))
+    .filter(a => !q || [a.depot_code,a.location,a.region].join(' ').toLowerCase().includes(q))
     .sort((a,b)=> String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||'')));
 
   $('#listSub').textContent = S.audits.length
@@ -913,9 +914,9 @@ function renderList(){
   $('#listBody').innerHTML = rows.map(a=>{
     const period = (a.period_from||a.period_to) ? `${a.period_from||'?'} → ${a.period_to||'?'}` : 'Period not set';
     return `<div class="arow" data-id="${esc(a.id)}">
-      <div class="acode">${esc(a.code||'—')}</div>
+      <div class="acode">${esc(a.depot_code||'—')}</div>
       <div class="amain">
-        <div class="aname">${esc(a.location||'Location not set')} · ${esc(a.area||'Area not set')}</div>
+        <div class="aname">${esc(a.location||'Location not set')} · ${esc(a.region||'Region not set')}</div>
         <div class="ameta">${esc(period)} &nbsp;·&nbsp; ${esc(footerText(a))}</div>
       </div>
       <span class="pill ${a.status==='Final'?'final':'draft'}">${esc(a.status||'Draft')}</span>
@@ -939,8 +940,8 @@ async function openAudit(id){
 }
 function renderAudit(){
   const a = S.audit;
-  $('#auTitle').textContent = `${a.code||'—'} · ${a.location||'Location not set'}`;
-  $('#auSub').innerHTML = `${esc(a.area||'Area not set')} &nbsp;·&nbsp; ${esc(a.period_from||'?')} → ${esc(a.period_to||'?')}
+  $('#auTitle').textContent = `${a.depot_code||'—'} · ${a.location||'Location not set'}`;
+  $('#auSub').innerHTML = `${esc(a.region||'Region not set')} &nbsp;·&nbsp; ${esc(a.period_from||'?')} → ${esc(a.period_to||'?')}
     &nbsp;·&nbsp; <span class="pill ${a.status==='Final'?'final':'draft'}">${esc(a.status||'Draft')}</span>`;
 
   if (!S.obs.length){
@@ -1014,7 +1015,7 @@ function renderObsForm(){
   const o = S.ob;
   const i = S.obs.findIndex(x=>x.id===o.id);
   $('#obTitleHead').textContent = 'Observation ' + (i+1);
-  $('#obSub').textContent = `${S.audit.code||'—'} · ${S.audit.location||''} · ${S.audit.area||''}`;
+  $('#obSub').textContent = `${S.audit.depot_code||'—'} · ${S.audit.location||''} · ${S.audit.region||''}`;
 
   const ownerOpts = ['<option value="">— select owner —</option>']
     .concat((S.config.owners||[]).map(n=>`<option>${esc(n)}</option>`)).join('');
@@ -1349,21 +1350,17 @@ $('#modalCancel').addEventListener('click', closeModal);
 $('#modal').addEventListener('click', e=>{ if (e.target.id === 'modal') closeModal(); });
 $('#modalOk').addEventListener('click', async ()=>{ if (M.ok) await M.ok(); });
 
-/* Options list for a picklist, with the current value pre-selected. */
-function optList(items, val){
-  return ['<option value="">— select —</option>']
-    .concat((items||[]).map(x=>`<option ${x===val?'selected':''}>${esc(x)}</option>`)).join('');
-}
 function auditFormHTML(a){
   return `
-  <div class="grid2">
-    <div class="form-group"><label class="form-label" for="m_code">Audit code <span style="color:var(--red)">*</span></label>
-      <input class="form-input" id="m_code" value="${esc(a.code)}" placeholder="58"></div>
+  <div class="fsec">Depot Details</div>
+  <div class="grid3">
+    <div class="form-group"><label class="form-label" for="m_depot_code">Depot Code <span style="color:var(--red)">*</span></label>
+      <input class="form-input" id="m_depot_code" value="${esc(a.depot_code)}" placeholder="58"></div>
     <div class="form-group"><label class="form-label" for="m_location">Location <span style="color:var(--red)">*</span></label>
       <input class="form-input" id="m_location" value="${esc(a.location)}" placeholder="Nalagarh"></div>
+    <div class="form-group"><label class="form-label" for="m_region">Region <span style="color:var(--red)">*</span></label>
+      <input class="form-input" id="m_region" value="${esc(a.region)}" placeholder="North"></div>
   </div>
-  <div class="form-group"><label class="form-label" for="m_area">Audit area <span style="color:var(--red)">*</span></label>
-    <select class="form-select" id="m_area">${optList(S.config.areas, a.area)}</select></div>
   <div class="grid2">
     <div class="form-group"><label class="form-label" for="m_from">Period from</label>
       <input class="form-input" type="date" id="m_from" value="${esc(a.period_from)}"></div>
@@ -1386,25 +1383,25 @@ function auditFormHTML(a){
 function wireAuditForm(a){
   const upd = ()=>{
     $('#m_foot').textContent = footerText({
-      code: $('#m_code').value.trim(), location: $('#m_location').value.trim(),
-      area: $('#m_area').value, status: $('#m_status').value
+      depot_code: $('#m_depot_code').value.trim(), location: $('#m_location').value.trim(),
+      region: $('#m_region').value.trim(), status: $('#m_status').value
     });
   };
-  ['#m_code','#m_location','#m_area','#m_status'].forEach(s=>{
+  ['#m_depot_code','#m_location','#m_region','#m_status'].forEach(s=>{
     $(s).addEventListener('input', upd); $(s).addEventListener('change', upd);
   });
   upd();
 }
 function readAuditForm(a){
-  a.code = $('#m_code').value.trim();
+  a.depot_code = $('#m_depot_code').value.trim();
   a.location = $('#m_location').value.trim();
-  a.area = $('#m_area').value;
+  a.region = $('#m_region').value.trim();
   a.period_from = $('#m_from').value;
   a.period_to = $('#m_to').value;
   a.status = $('#m_status').value;
   a.audit_team = $('#m_team').value.trim();
-  if (!a.code || !a.location || !a.area){
-    $('#m_err').innerHTML = '<div class="err">Audit code, location and area are all required — they make up the report footer.</div>';
+  if (!a.depot_code || !a.location || !a.region){
+    $('#m_err').innerHTML = '<div class="err">Depot Code, Location and Region are all required — together they make up the report footer.</div>';
     return false;
   }
   return true;
@@ -1432,25 +1429,23 @@ $('#btnEditAudit').addEventListener('click', ()=>{
   });
   wireAuditForm(a);
   $('#m_del').addEventListener('click', async ()=>{
-    if (!confirm(`Delete audit ${a.code} and all ${S.obs.length} observation(s)? This cannot be undone.`)) return;
+    if (!confirm(`Delete audit ${a.depot_code} and all ${S.obs.length} observation(s)? This cannot be undone.`)) return;
     try { await Store.deleteAudit(a.id); } catch(e){ flag('Could not delete: '+e.message,'bad'); return; }
     S.audits = S.audits.filter(x=>x.id!==a.id);
     closeModal(); loadList();
   });
 });
-/* Settings — the admin-editable picklists behind Audit area / Owner.
-   Location is free text on the audit form, so it has no list here. */
+/* Settings — the Implementation owner picklist. Depot Code, Location and
+   Region are all typed on the audit form, so none of them has a list. */
 $('#btnSettings').addEventListener('click', ()=>{
   const c = S.config;
   openModal('Settings', `
-    <div class="hint" style="margin-bottom:14px;">One value per line. These fill the Audit area and Implementation owner dropdowns.</div>
-    <div class="form-group"><label class="form-label" for="s_areas">Audit areas</label>
-      <textarea class="form-area" id="s_areas" rows="6">${esc((c.areas||[]).join('\n'))}</textarea></div>
+    <div class="hint" style="margin-bottom:14px;">One value per line. Fills the Implementation owner dropdown in the observation editor.</div>
     <div class="form-group"><label class="form-label" for="s_owners">Implementation owners</label>
       <textarea class="form-area" id="s_owners" rows="5">${esc((c.owners||[]).join('\n'))}</textarea></div>
     <div id="m_err"></div>`, async ()=>{
     const lines = id => $('#'+id).value.split('\n').map(s=>s.trim()).filter(Boolean);
-    const next = { areas:lines('s_areas'), owners:lines('s_owners') };
+    const next = { owners:lines('s_owners') };
     try { await Store.saveConfig(next); } catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
     S.config = next;
     closeModal(); flag('Settings saved','ok');

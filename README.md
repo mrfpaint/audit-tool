@@ -1,4 +1,4 @@
-# Internal Audit Report Builder
+# Digital Internal Audit Tool
 
 Internal auditors record observations here and export the draft report as a PDF in
 the format MRF already issues — the same layout as `Admin audit.pdf`.
@@ -30,7 +30,7 @@ A segment left blank is dropped rather than leaving a stray underscore.
 The editor mirrors the printed page top to bottom, so what you fill in is where it
 lands:
 
-- **Heading & risk** — title, Repeat Yes/No, Value (INR), Risk Rating
+- **Heading & risk** — title, Repeat Yes/No, Value in INR (printed in lakhs), Risk Rating
   **C**ritical / **H**igh / **M**edium / **L**ow, System Improvement Yes/No
 - **Background** — rich text
 - **Observation(s)** — rich text, usually a numbered finding list plus data tables
@@ -51,8 +51,13 @@ noise.
 Bands with nothing in them are skipped when printing, so a half-finished
 observation never prints a stranded gold header.
 
-Values use Indian digit grouping — `169000` prints as `1,69,000` — and
-timelines print as `March 31, 2024`.
+Values print in **lakhs** — `120000` becomes `Value: INR 1.20 Lakhs`, and a
+zero prints as a plain `INR 0`. Target dates print as `March 31, 2024`.
+
+Note that a value well under a lakh loses resolution in that format: ₹5,830
+prints as `0.06 Lakhs`. If your observations routinely carry small rupee
+amounts, the formatter can switch to grouped digits below a threshold and
+lakhs above it.
 
 ## Exporting the PDF
 

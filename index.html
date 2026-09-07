@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Internal Audit Report Builder</title>
+<title>Digital Internal Audit Tool</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ==========================================================================
@@ -34,7 +34,7 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
    -------------------------------------------------------------------------- */
 .header{background:linear-gradient(135deg,var(--dark),var(--dark2));color:#fff;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3);}
 .hb{display:flex;align-items:center;gap:10px;}
-.hl{width:32px;height:32px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:#fff;}
+.hl{width:36px;height:32px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;letter-spacing:.5px;color:#fff;}
 .ht{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:.5px;}
 .ht span{color:var(--gold);}
 .hs{font-size:10px;color:rgba(255,255,255,.5);letter-spacing:1px;text-transform:uppercase;}
@@ -50,8 +50,8 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .auth-wrap{min-height:100vh;background:linear-gradient(135deg,var(--dark),#0f3460,var(--dark2));display:flex;align-items:center;justify-content:center;padding:24px 16px;}
 .auth-card{background:#fff;border-radius:20px;padding:36px 28px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
 .auth-logo-wrap{text-align:center;margin-bottom:24px;}
-.auth-logo{width:56px;height:56px;background:linear-gradient(135deg,var(--red),var(--red-dark));border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;color:#fff;margin-bottom:12px;box-shadow:0 8px 20px rgba(200,16,46,.3);}
-.auth-brand{font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--dark);}
+.auth-logo{width:56px;height:56px;background:linear-gradient(135deg,var(--red),var(--red-dark));border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;color:#fff;margin-bottom:12px;box-shadow:0 8px 20px rgba(200,16,46,.3);}
+.auth-brand{font-family:'Rajdhani',sans-serif;font-size:21px;font-weight:700;color:var(--dark);line-height:1.2;}
 .auth-brand span{color:var(--red);}
 .auth-tagline{font-size:12px;color:var(--gray);margin-top:4px;}
 .auth-title{font-size:18px;font-weight:600;color:var(--dark);margin-bottom:6px;}
@@ -296,8 +296,8 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 <div id="scr-auth" class="screen active">
   <div class="auth-wrap"><div class="auth-card">
     <div class="auto-logo-wrap auth-logo-wrap">
-      <div class="auth-logo">IA</div>
-      <div class="auth-brand">Internal <span>Audit</span></div>
+      <div class="auth-logo">DIA</div>
+      <div class="auth-brand">Digital Internal <span>Audit</span> Tool</div>
       <div class="auth-tagline">Observation &amp; report builder</div>
     </div>
     <div class="auth-title">Sign in</div>
@@ -317,8 +317,8 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 <!-- ======================= APP HEADER ======================= -->
 <div class="header noprint" id="appHeader" style="display:none;">
   <div class="hb">
-    <div class="hl">IA</div>
-    <div><div class="ht">INTERNAL <span>AUDIT</span></div><div class="hs">Report Builder</div></div>
+    <div class="hl">DIA</div>
+    <div><div class="ht">DIGITAL INTERNAL <span>AUDIT</span></div><div class="hs">Tool</div></div>
   </div>
   <div class="hr">
     <span class="ubadge" id="storeBadge"></span>
@@ -436,7 +436,8 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 /* Escape text that goes into HTML we build by hand. */
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-/* Indian digit grouping — the sample report writes 1,69,000 not 169,000. */
+/* Indian digit grouping — 1,69,000 rather than 169,000. Kept because a
+   value typed into the editor is echoed back grouped while being entered. */
 function inr(n){
   n = Math.round(Number(n)||0);
   const s = String(Math.abs(n));
@@ -444,6 +445,15 @@ function inr(n){
   if (s.length <= 3) out = s;
   else { const last3 = s.slice(-3); out = s.slice(0,-3).replace(/\B(?=(\d{2})+(?!\d))/g,',') + ',' + last3; }
   return (n<0?'-':'') + out;
+}
+/* Value as lakhs, which is how the reports quote it: 120000 -> "1.20 Lakhs".
+   A lakh is 1,00,000. Zero prints as a plain "0" rather than "0.00 Lakhs",
+   which is what most observations carry. Note that a sum well under a lakh
+   loses resolution here (5,830 shows as "0.06 Lakhs") - see README. */
+function lakhs(v){
+  const num = Number(v) || 0;
+  if (num === 0) return '0';
+  return (num / 100000).toFixed(2) + ' Lakhs';
 }
 /* "2024-03-31" -> "March 31, 2024", the format used in the sample. */
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -954,7 +964,7 @@ function renderAudit(){
       <div class="oseq">${i+1}</div>
       <div class="rbadge ${esc(o.risk_rating||'L')}" title="${esc(CFG.RISK[o.risk_rating]||'')}">${esc(o.risk_rating||'L')}</div>
       <div class="otitle">${esc(o.title||'(untitled observation)')}</div>
-      <div style="font-size:12px;color:var(--gray);white-space:nowrap;">${Number(o.value_at_risk)>0?'INR '+inr(o.value_at_risk):''}</div>
+      <div style="font-size:12px;color:var(--gray);white-space:nowrap;">${Number(o.value_at_risk)>0?'INR '+lakhs(o.value_at_risk):''}</div>
       <button class="btn sm" data-mv="up"  ${i===0?'disabled':''} title="Move up">&uarr;</button>
       <button class="btn sm" data-mv="dn"  ${i===S.obs.length-1?'disabled':''} title="Move down">&darr;</button>
       <button class="btn sm pri" data-open="1">Edit</button>
@@ -1045,7 +1055,7 @@ function renderObsForm(){
       <div class="form-group">
         <label class="form-label" for="f_var">Value (INR)</label>
         <input class="form-input" id="f_var" type="number" min="0" step="1" value="${esc(o.value_at_risk||0)}">
-        <div class="hint">Prints as “Value: INR <b id="varEcho">${inr(o.value_at_risk)}</b>”.</div>
+        <div class="hint">Prints as “Value: INR <b id="varEcho">${lakhs(o.value_at_risk)}</b>”.</div>
       </div>
     </div>
     <div class="form-group" style="margin-bottom:0;">
@@ -1107,7 +1117,7 @@ function renderObsForm(){
   $('#f_title').addEventListener('input', e=>{ o.title = e.target.value; touch(); });
   $('#f_var').addEventListener('input', e=>{
     o.value_at_risk = Number(e.target.value)||0;
-    $('#varEcho').textContent = inr(o.value_at_risk);
+    $('#varEcho').textContent = lakhs(o.value_at_risk);
     touch();
   });
   $('#f_attach').addEventListener('input', e=>{
@@ -1302,7 +1312,7 @@ function reportObs(audit, o, n){
     <div class="phdr">
       <span class="ph-a">Background</span>
       <span class="ph-b">Repeat: ${esc(o.repeat||'No')}</span>
-      <span class="ph-c">Value: INR ${inr(o.value_at_risk)}</span>
+      <span class="ph-c">Value: INR ${lakhs(o.value_at_risk)}</span>
       <span class="ph-d">Risk<br>Rating</span>
       <span class="ph-e">${boxes}</span>
     </div>

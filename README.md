@@ -73,27 +73,28 @@ than rendered as urgent.
 
 ## The cover page
 
-**Cover page** in the audit workspace opens a free-text box that prints as the
-first page of the report, ahead of Observation 1. It is deliberately
-unstructured — type whatever the front page should say, with the same bold /
-lists / tables the observation editor offers.
+**Cover page** in the audit workspace opens a form. Fill it in and the tool
+composes page 1, ahead of Observation 1, with a live preview beneath the fields
+so you can see exactly what will print.
 
-**Insert standard layout** fills the box with a starting point built from the
-audit's own fields, following the layout MRF already uses:
+| You type | Comes from the audit |
+|---|---|
+| Classification (defaults to `CONFIDENTIAL`) | Report number |
+| Report date | Location and Region |
+| Previous audit | Period of audit |
+| Process Owners / Management / Audit Team | |
 
-```
-CONFIDENTIAL
-<today's date>
-INTERNAL AUDIT REPORT No. <report number>
-<location> - <region>
-PERIOD OF AUDIT        <period from> to <period to>
-PREVIOUS AUDIT
-Internal Audit Report Distribution
-Process Owners: / Management: / Audit Team:
-```
+Anything left blank is skipped rather than printing an empty caption, so a
+half-filled form still produces a tidy page. **Include a cover page** must be
+set to Yes — off by default, so reports that do not use one are unchanged.
 
-It is only a suggestion — edit or replace it freely. Leave the box empty and no
-cover page is printed, so reports that do not use one are unchanged.
+Audit Team is the same field that used to sit in Audit details; it moved here
+because the cover is the only place it appears.
+
+The fields are stored as JSON in the audit's single `cover` cell — the same
+approach the implementation rows use — so they needed no new Sheet columns and
+no Apps Script redeploy. A cover typed into the earlier free-text box still
+prints verbatim until the form is saved over it.
 
 ## The observation fields
 

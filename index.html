@@ -234,9 +234,24 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
    paragraphs. It needs no break-after of its own: the first .pobs stops being
    :first-child once a cover exists, so that section's break-before starts
    page 2. A second rule here would risk an empty sheet between them. */
-.pcover{font-size:12pt;line-height:1.5;}
-.pcover p{margin:7pt 0;}
+.pcover{font-size:12pt;line-height:1.45;}
+.pcover p{margin:6pt 0;}
 .pcover table.dt{font-size:11pt;}
+.cclass{font-weight:bold;font-size:11pt;letter-spacing:1.5pt;}
+.cdate{font-weight:bold;font-size:13pt;margin-top:26pt !important;}
+.ctitle{font-weight:bold;font-size:16pt;margin-top:26pt !important;}
+.cdepot{font-weight:bold;font-size:13pt;}
+/* Section captions sit on the same gold rule the observation pages use, so the
+   cover reads as part of the report rather than a separate document. */
+.clabel{font-weight:bold;font-size:10.5pt;letter-spacing:.6pt;margin-top:22pt;
+        border-bottom:1.2pt solid var(--gold);padding-bottom:2pt;}
+.cdist{border-collapse:collapse;width:100%;margin-top:26pt;font-size:11pt;}
+.cdist th{background:var(--gold);font-weight:bold;text-align:left;padding:4pt 6pt;border:.6pt solid #808080;}
+.cdist td{border:.6pt solid #808080;padding:4pt 6pt;vertical-align:top;}
+.cdist td.k{width:120pt;font-weight:bold;}
+/* On-screen preview inside the cover dialog. */
+.coverprev{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px 22px;
+           font-family:Arial,Helvetica,sans-serif;color:#000;max-height:420px;overflow:auto;}
 /* The report is always Arial at 9.6pt — matching wkhtmltopdf's output. */
 #printroot{font-family:Arial,Helvetica,sans-serif;font-size:9.6pt;color:#000;line-height:1.32;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -1425,10 +1440,7 @@ window.addEventListener('beforeunload', e=>{ if (S.dirty){ e.preventDefault(); e
    every sheet.
    ========================================================================== */
 function buildReport(audit, obs){
-  /* An empty cover prints nothing at all, so reports that do not use one look
-     exactly as they did before. */
-  const cover = blank(audit.cover) ? '' : `<section class="pcover">${audit.cover}</section>`;
-  const body = cover + obs.map((o,i)=> reportObs(audit, o, i+1)).join('');
+  const body = reportCover(audit) + obs.map((o,i)=> reportObs(audit, o, i+1)).join('');
   /* The <tfoot> is what makes the footer repeat on every printed page — see
      the .pwrap comment in the stylesheet. */
   return `<table class="pwrap">`
@@ -1528,44 +1540,128 @@ $('#modalCancel').addEventListener('click', closeModal);
 $('#modal').addEventListener('click', e=>{ if (e.target.id === 'modal') closeModal(); });
 $('#modalOk').addEventListener('click', async ()=>{ if (M.ok) await M.ok(); });
 
-/* A starting point for the cover page, built from what the audit already
-   knows. Only a suggestion - the box is free text and this can be typed over
-   or replaced entirely. */
-function coverTemplate(a){
+/* The cover page is a set of fields, not free text. They are stored as JSON in
+   the audit's single `cover` cell - the same trick the implementation rows use
+   - so adding them needed no new Sheet columns and no Apps Script redeploy. */
+const COVER_DEFAULTS = { on:false, classification:'CONFIDENTIAL', report_date:'',
+                         previous_audit:'', process_owners:'', management:'' };
+function coverData(a){
+  const raw = a.cover || '';
+  if (!raw) return Object.assign({}, COVER_DEFAULTS);
+  try {
+    const o = JSON.parse(raw);
+    if (o && typeof o === 'object' && !Array.isArray(o)) return Object.assign({}, COVER_DEFAULTS, o);
+  } catch(e){ /* falls through */ }
+  /* Not JSON: a cover typed into the earlier free-text box. Keep printing it
+     verbatim rather than discarding what someone wrote. */
+  return Object.assign({}, COVER_DEFAULTS, { on:true, legacy_html:raw });
+}
+const nl2br = v => esc(v || '').split('\n').join('<br>');
+
+/* Compose the printed cover from the audit's fields. Blocks with nothing in
+   them are skipped, so a half-filled form never prints an empty caption. */
+function reportCover(a){
+  const c = coverData(a);
+  if (!c.on) return '';
+  if (c.legacy_html) return `<section class="pcover">${c.legacy_html}</section>`;
+
+  const depot  = [a.location, a.region].filter(Boolean).join(' - ');
   const period = (a.period_from || a.period_to)
     ? `${longDate(a.period_from) || '?'} to ${longDate(a.period_to) || '?'}` : '';
-  const today = new Date();
-  const iso = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0')
-            + '-' + String(today.getDate()).padStart(2,'0');
-  const gap = '<p><br></p>';
-  return `<p><b>CONFIDENTIAL</b></p>${gap}`
-    + `<p><b>${esc(longDate(iso))}</b></p>${gap}`
-    + `<p><b>INTERNAL AUDIT REPORT No. ${esc(a.report_no||'')}</b></p>`
-    + `<p><b>${esc([a.location, a.region].filter(Boolean).join(' - '))}</b></p>${gap}`
-    + `<p><b>PERIOD OF AUDIT</b></p><p>${esc(period)}</p>${gap}`
-    + `<p><b>PREVIOUS AUDIT</b></p><p><br></p>${gap}`
-    + `<p><b>Internal Audit Report Distribution</b></p>`
-    + `<p>Process Owners:</p><p>Management:</p><p>Audit Team:</p>`;
+  const dist = [['Process Owners', c.process_owners],
+                ['Management',     c.management],
+                ['Audit Team',     a.audit_team]].filter(r => (r[1]||'').trim());
+
+  let h = '';
+  if (c.classification) h += `<p class="cclass">${esc(c.classification)}</p>`;
+  if (c.report_date)    h += `<p class="cdate">${esc(longDate(c.report_date))}</p>`;
+  if (a.report_no)      h += `<p class="ctitle">INTERNAL AUDIT REPORT No. ${esc(a.report_no)}</p>`;
+  if (depot)            h += `<p class="cdepot">${esc(depot)}</p>`;
+  if (period)           h += `<div class="clabel">PERIOD OF AUDIT</div><p>${esc(period)}</p>`;
+  if (c.previous_audit) h += `<div class="clabel">PREVIOUS AUDIT</div><p>${nl2br(c.previous_audit)}</p>`;
+  if (dist.length){
+    h += `<table class="cdist"><tr><th colspan="2">Internal Audit Report Distribution</th></tr>`
+       + dist.map(r=>`<tr><td class="k">${esc(r[0])}</td><td>${nl2br(r[1])}</td></tr>`).join('')
+       + `</table>`;
+  }
+  return `<section class="pcover">${h}</section>`;
 }
+/* The cover page dialog: a form, with a live preview of what will print.
+   Audit team lives on the audit record itself and is edited here rather than
+   in Audit details, because the cover is the only place it appears. */
 $('#btnCover').addEventListener('click', ()=>{
   const a = S.audit;
+  const c = coverData(a);
+  const legacy = !!c.legacy_html;
+
   openModal('Cover page', `
-    <div class="hint" style="margin-bottom:12px;">Free text — type whatever the front page should say. It prints ahead of Observation 1, and an empty box prints no cover page at all.</div>
-    <div style="margin-bottom:10px;"><button type="button" class="btn sm" id="m_tpl">Insert standard layout</button></div>
-    ${rteHTML('m_cover','Type the cover page…', a.cover||'')}
+    <div class="form-group">
+      <label class="form-label">Include a cover page</label>
+      <div class="seg" id="c_on">
+        <button type="button" data-v="no"  class="${c.on?'':'on'}">No</button>
+        <button type="button" data-v="yes" class="${c.on?'on':''}">Yes</button>
+      </div>
+      <div class="hint">Prints ahead of Observation 1. The report number, depot and audit period come from the audit itself.</div>
+    </div>
+    ${legacy ? '<div class="err" style="background:#fffbeb;border-color:#fde68a;color:#92400e;">This cover was typed into the old free-text box. Saving this form replaces it.</div>' : ''}
+    <div id="c_fields">
+      <div class="grid2">
+        <div class="form-group"><label class="form-label" for="c_class">Classification</label>
+          <input class="form-input" id="c_class" value="${esc(c.classification)}" placeholder="CONFIDENTIAL"></div>
+        <div class="form-group"><label class="form-label" for="c_date">Report date</label>
+          <input class="form-input" type="date" id="c_date" value="${esc(c.report_date)}"></div>
+      </div>
+      <div class="form-group"><label class="form-label" for="c_prev">Previous audit</label>
+        <input class="form-input" id="c_prev" value="${esc(c.previous_audit)}" placeholder="December 2025"></div>
+      <div class="fsec">Report Distribution</div>
+      <div class="form-group"><label class="form-label" for="c_owners">Process Owners</label>
+        <textarea class="form-area" id="c_owners" rows="2" placeholder="One per line, or comma separated">${esc(c.process_owners)}</textarea></div>
+      <div class="form-group"><label class="form-label" for="c_mgmt">Management</label>
+        <textarea class="form-area" id="c_mgmt" rows="2">${esc(c.management)}</textarea></div>
+      <div class="form-group"><label class="form-label" for="c_team">Audit Team</label>
+        <textarea class="form-area" id="c_team" rows="2">${esc(a.audit_team||'')}</textarea></div>
+      <div class="fsec">Preview</div>
+      <div class="coverprev" id="c_prev_box"></div>
+    </div>
     <div id="m_err" style="margin-top:12px;"></div>`, async ()=>{
-    a.cover = sanitize($('#m_cover').innerHTML);
+    const next = readCoverForm(a);
+    a.cover = JSON.stringify(next);
     try { await Store.saveAudit(a); }
     catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
     closeModal(); flag('Cover page saved','ok');
   }, 'Save cover page');
+
   $('.modalbox').classList.add('wide');
-  rteInit('m_cover');
-  $('#m_tpl').addEventListener('click', ()=>{
-    const ed = $('#m_cover');
-    if (!blank(ed.innerHTML) && !confirm('Replace what is already in the cover page?')) return;
-    ed.innerHTML = coverTemplate(a);
+
+  /* Read the form into a cover object without touching the stored audit, so
+     the preview can render exactly what Save would produce. */
+  function readCoverForm(target){
+    const on = $('#c_on button.on').dataset.v === 'yes';
+    target.audit_team = $('#c_team').value.trim();
+    return { on,
+      classification: $('#c_class').value.trim(),
+      report_date:    $('#c_date').value,
+      previous_audit: $('#c_prev').value.trim(),
+      process_owners: $('#c_owners').value.trim(),
+      management:     $('#c_mgmt').value.trim() };
+  }
+  function refresh(){
+    const draft = Object.assign({}, a, { audit_team: $('#c_team').value.trim() });
+    draft.cover = JSON.stringify(Object.assign(readCoverForm(draft), { on:true }));
+    $('#c_prev_box').innerHTML = reportCover(draft) || '<div style="color:#9ca3af;font-family:DM Sans,sans-serif;font-size:13px;">Nothing to show yet.</div>';
+    const on = $('#c_on button.on').dataset.v === 'yes';
+    $('#c_fields').style.opacity = on ? '1' : '.45';
+    $('#c_fields').style.pointerEvents = on ? 'auto' : 'none';
+  }
+  $$('#c_on button').forEach(b=> b.addEventListener('click', ()=>{
+    $$('#c_on button').forEach(x=>x.classList.toggle('on', x===b));
+    refresh();
+  }));
+  ['c_class','c_date','c_prev','c_owners','c_mgmt','c_team'].forEach(id=>{
+    $('#'+id).addEventListener('input', refresh);
+    $('#'+id).addEventListener('change', refresh);
   });
+  refresh();
 });
 
 function auditFormHTML(a){
@@ -1589,15 +1685,13 @@ function auditFormHTML(a){
     <div class="form-group"><label class="form-label" for="m_to">Period to</label>
       <input class="form-input" type="date" id="m_to" value="${esc(a.period_to)}"></div>
   </div>
-  <div class="grid2">
+  <div>
     <div class="form-group"><label class="form-label" for="m_status">Report status</label>
       <select class="form-select" id="m_status">
         <option ${a.status!=='Final'?'selected':''}>Draft</option>
         <option ${a.status==='Final'?'selected':''}>Final</option>
       </select>
       <div class="hint">Sets the footer prefix — “<b>Draft</b> Report - …”.</div></div>
-    <div class="form-group"><label class="form-label" for="m_team">Audit team</label>
-      <input class="form-input" id="m_team" value="${esc(a.audit_team)}" placeholder="Names, comma separated"></div>
   </div>
   <div id="m_err"></div>
   <div class="hint">Footer preview: <b id="m_foot"></b></div>`;
@@ -1631,7 +1725,6 @@ function readAuditForm(a){
   a.period_from = $('#m_from').value;
   a.period_to = $('#m_to').value;
   a.status = $('#m_status').value;
-  a.audit_team = $('#m_team').value.trim();
   if (!a.report_no || !a.depot_code || !a.location || !a.region){
     $('#m_err').innerHTML = '<div class="err">Report Number, Depot Code, Location and Region are all required — together they make up the report footer.</div>';
     return false;

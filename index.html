@@ -109,6 +109,22 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 /* Risk badge — C/H/M/L, coloured by severity so the list scans quickly. */
 .rbadge{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:0 0 auto;}
 .rbadge.C{background:#7f1d1d;} .rbadge.H{background:#dc2626;} .rbadge.M{background:#f59e0b;} .rbadge.L{background:#65a30d;}
+/* Target-date chip on an observation row. The colour is the whole point: an
+   auditor scanning the list should see what has slipped without reading. */
+.due{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:11px;padding:4px 10px;border-radius:9px;white-space:nowrap;flex:0 0 auto;min-width:104px;}
+.due b{font-weight:700;font-size:11.5px;}
+.due span{font-weight:500;opacity:.85;}
+.due.over{background:#fee2e2;color:#991b1b;}          /* past the target date */
+.due.soon{background:#ffedd5;color:#9a3412;}          /* within a week */
+.due.near{background:#fef9c3;color:#854d0e;}          /* within a month */
+.due.ok  {background:#ecfdf5;color:#065f46;}          /* comfortably ahead */
+.due.none{background:var(--gray-light);color:var(--gray);}
+/* Roll-up beside the "Observations" heading. */
+.duesum{display:flex;gap:6px;flex-wrap:wrap;}
+.duesum span{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;}
+.duesum .over{background:#fee2e2;color:#991b1b;}
+.duesum .soon{background:#ffedd5;color:#9a3412;}
+.duesum .none{background:var(--gray-light);color:var(--gray);}
 
 /* --------------------------------------------------------------------------
    OBSERVATION EDITOR — each field group is introduced by a gold band that
@@ -357,7 +373,10 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-        <div style="font-weight:600;font-size:15px;">Observations</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="font-weight:600;font-size:15px;">Observations</div>
+          <div class="duesum" id="dueSummary"></div>
+        </div>
         <button class="btn pri" id="btnAddObs">+ Add observation</button>
       </div>
       <div id="obsList"></div>
@@ -454,6 +473,48 @@ function lakhs(v){
   const num = Number(v) || 0;
   if (num === 0) return '0';
   return (num / 100000).toFixed(2) + ' Lakhs';
+}
+/* "2024-03-31" -> "31 Aug 2026". Compact form for the on-screen list; the
+   printed report keeps the long form below. */
+const MON3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function shortDate(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');
+  return m ? `${+m[3]} ${MON3[+m[2]-1]} ${m[1]}` : '';
+}
+/* Whole days from today to an ISO date: negative when the date has passed,
+   0 when it is today. Both sides are snapped to local midnight so the answer
+   does not change with the time of day, and the result is rounded so a DST
+   shift inside the span cannot knock it off by one. */
+function daysUntil(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');
+  if (!m) return null;
+  const target = new Date(+m[1], +m[2]-1, +m[3]);
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((target - today) / 86400000);
+}
+/* The soonest target date an observation carries. An observation can commit
+   several people on different dates; the earliest is the one that decides
+   whether it is running late, so that is what the list shows. */
+function dueInfo(o){
+  /* Only well-formed dates count. target_date normally comes from an
+     <input type="date"> so it is always yyyy-mm-dd, but it rides inside the
+     implementation JSON blob, which Apps Script stores verbatim - a
+     hand-edited cell could put anything there, and an unparseable value
+     would otherwise render as an urgent "null days left". Sorting ISO
+     strings lexically is the same as sorting them chronologically. */
+  const dates = (o.implementation || [])
+    .map(r => r.target_date)
+    .filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v || ''))
+    .sort();
+  const rows  = (o.implementation || []).length;
+  if (!dates.length) return { none:true, hasRows:rows>0 };
+  const iso = dates[0];
+  const d = daysUntil(iso);
+  const cls = d < 0 ? 'over' : d <= 7 ? 'soon' : d <= 30 ? 'near' : 'ok';
+  const label = d < 0  ? `${-d} day${-d===1?'':'s'} overdue`
+              : d === 0 ? 'Due today'
+              : `${d} day${d===1?'':'s'} left`;
+  return { iso, d, cls, label, extra: dates.length - 1 };
 }
 /* "2024-03-31" -> "March 31, 2024", the format used in the sample. */
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -965,11 +1026,13 @@ function renderAudit(){
       <div class="rbadge ${esc(o.risk_rating||'L')}" title="${esc(CFG.RISK[o.risk_rating]||'')}">${esc(o.risk_rating||'L')}</div>
       <div class="otitle">${esc(o.title||'(untitled observation)')}</div>
       <div style="font-size:12px;color:var(--gray);white-space:nowrap;">${Number(o.value_at_risk)>0?'INR '+lakhs(o.value_at_risk):''}</div>
+      ${dueChip(o)}
       <button class="btn sm" data-mv="up"  ${i===0?'disabled':''} title="Move up">&uarr;</button>
       <button class="btn sm" data-mv="dn"  ${i===S.obs.length-1?'disabled':''} title="Move down">&darr;</button>
       <button class="btn sm pri" data-open="1">Edit</button>
     </div>`).join('');
 
+  renderDueSummary();
   $$('#obsList .orow').forEach(el=>{
     const id = el.dataset.id;
     el.querySelector('[data-open]').addEventListener('click', ()=> openObs(id));
@@ -1210,6 +1273,38 @@ function renderImplRows(){
     });
   });
 }
+/* The target-date chip shown at the right of an observation row. */
+function dueChip(o){
+  const info = dueInfo(o);
+  if (info.none){
+    /* Only nag about a missing date once an action plan exists - a brand new
+       observation has not been discussed with management yet. */
+    return info.hasRows
+      ? `<div class="due none" title="An implementation row has no target date"><b>No target date</b></div>`
+      : `<div class="due none" style="background:transparent;"></div>`;
+  }
+  const more = info.extra > 0 ? ` (+${info.extra} more)` : '';
+  return `<div class="due ${info.cls}" title="Earliest target date across ${info.extra+1} implementation row(s)">`
+       + `<b>${esc(shortDate(info.iso))}</b><span>${esc(info.label)}${more}</span></div>`;
+}
+/* Roll-up next to the Observations heading, so the state of the whole audit
+   reads at a glance rather than row by row. */
+function renderDueSummary(){
+  const host = $('#dueSummary');
+  if (!host) return;
+  let over=0, soon=0, missing=0;
+  S.obs.forEach(o=>{
+    const i = dueInfo(o);
+    if (i.none){ if (i.hasRows) missing++; return; }
+    if (i.d < 0) over++; else if (i.d <= 7) soon++;
+  });
+  const bits = [];
+  if (over)    bits.push(`<span class="over">${over} overdue</span>`);
+  if (soon)    bits.push(`<span class="soon">${soon} due within 7 days</span>`);
+  if (missing) bits.push(`<span class="none">${missing} with no target date</span>`);
+  host.innerHTML = bits.join('');
+}
+
 /* Debounced autosave so typing does not hit the Sheet on every keystroke. */
 let saveTimer = null;
 function queueSave(){

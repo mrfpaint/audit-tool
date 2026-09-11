@@ -15,7 +15,7 @@ One screen per job:
 | Screen | Purpose |
 |---|---|
 | Audits | every audit, searchable by depot code / location / region, each with a Draft or Final badge |
-| Audit workspace | the observations in one audit — reorder, add, delete, preview, export |
+| Audit workspace | the observations in one audit — reorder, add, delete, preview, export, and see what is running late |
 | Observation editor | all report fields, laid out in the same order they print |
 | Report preview | the finished report at true A4 width, then **Export PDF** |
 
@@ -24,6 +24,33 @@ Region**, all typed free-text — which is also what the report footer is built
 from: `58` + `Nalagarh` + `North` prints as `Draft Report - 58_Nalagarh_North`.
 Switching the audit's status to Final changes the footer to `Final Report - …`.
 A segment left blank is dropped rather than leaving a stray underscore.
+
+## Target dates and urgency
+
+Each observation row in the audit workspace carries a chip showing the
+**earliest target date** committed across its implementation rows, and how long
+is left:
+
+| Chip | Meaning |
+|---|---|
+| red | past its target date — `11 days overdue` |
+| orange | due within 7 days, or today |
+| yellow | due within 30 days |
+| green | more than 30 days out |
+| grey | an implementation row exists but no target date was set |
+
+An observation with several responsible people shows the **soonest** date, since
+that is the one that decides whether the observation is late; the chip notes
+`(+1 more)` when others follow. An observation with no implementation rows at
+all shows nothing — the action plan has not been agreed yet, so there is
+nothing to be late for.
+
+A roll-up beside the **Observations** heading counts what needs attention:
+`1 overdue · 2 due within 7 days · 1 with no target date`.
+
+Days are counted from local midnight to local midnight, so the number does not
+drift with the time of day, and a malformed date in the sheet is ignored rather
+than rendered as urgent.
 
 ## The observation fields
 

@@ -119,12 +119,14 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .due.near{background:#fef9c3;color:#854d0e;}          /* within a month */
 .due.ok  {background:#ecfdf5;color:#065f46;}          /* comfortably ahead */
 .due.none{background:var(--gray-light);color:var(--gray);}
+.due.done{background:#d1fae5;color:#065f46;}          /* every action closed */
 /* Roll-up beside the "Observations" heading. */
 .duesum{display:flex;gap:6px;flex-wrap:wrap;}
 .duesum span{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;}
 .duesum .over{background:#fee2e2;color:#991b1b;}
 .duesum .soon{background:#ffedd5;color:#9a3412;}
 .duesum .none{background:var(--gray-light);color:var(--gray);}
+.duesum .done{background:#d1fae5;color:#065f46;}
 
 /* --------------------------------------------------------------------------
    OBSERVATION EDITOR — each field group is introduced by a gold band that
@@ -180,6 +182,16 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .implrow{border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:11px;background:#fcfcfd;}
 .implhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;}
 .implhead span{font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.4px;}
+.implhead .hleft{display:flex;align-items:center;gap:10px;}
+/* A closed row is dimmed so the open ones stand out while scanning a long
+   action plan. Inputs stay editable - closing a row is not locking it. */
+.implrow.done{background:#f6fdf9;border-color:#a7f3d0;}
+.implrow.done .grid3{opacity:.6;}
+/* Open/Done toggle in the row header. */
+.stog{display:inline-flex;border:1.5px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;}
+.stog button{border:none;background:#fff;padding:4px 12px;font-family:'DM Sans',sans-serif;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--gray);}
+.stog button.on{background:var(--warning);color:#fff;}
+.stog button.on[data-v="Done"]{background:var(--success);}
 
 /* Autosave indicator that floats bottom-right while editing. */
 .saveflag{position:fixed;bottom:18px;right:18px;background:var(--dark);color:#fff;padding:8px 15px;border-radius:20px;font-size:12px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25);}
@@ -502,19 +514,24 @@ function dueInfo(o){
      hand-edited cell could put anything there, and an unparseable value
      would otherwise render as an urgent "null days left". Sorting ISO
      strings lexically is the same as sorting them chronologically. */
-  const dates = (o.implementation || [])
+  const rows = o.implementation || [];
+  /* A closed row cannot be late, so urgency is judged on the open ones only.
+     When every row is closed the observation is done rather than overdue -
+     without this an action completed last month would nag forever. */
+  const open = rows.filter(r => r.status !== 'Done');
+  const dates = open
     .map(r => r.target_date)
     .filter(v => /^\d{4}-\d{2}-\d{2}$/.test(v || ''))
     .sort();
-  const rows  = (o.implementation || []).length;
-  if (!dates.length) return { none:true, hasRows:rows>0 };
+  if (rows.length && !open.length) return { done:true, total:rows.length };
+  if (!dates.length) return { none:true, hasRows:rows.length>0 };
   const iso = dates[0];
   const d = daysUntil(iso);
   const cls = d < 0 ? 'over' : d <= 7 ? 'soon' : d <= 30 ? 'near' : 'ok';
   const label = d < 0  ? `${-d} day${-d===1?'':'s'} overdue`
               : d === 0 ? 'Due today'
               : `${d} day${d===1?'':'s'} left`;
-  return { iso, d, cls, label, extra: dates.length - 1 };
+  return { iso, d, cls, label, extra: dates.length - 1, closed: rows.length - open.length };
 }
 /* "2024-03-31" -> "March 31, 2024", the format used in the sample. */
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -621,6 +638,9 @@ function migrateObs(o){
     if (r.responsible === undefined && r.owner !== undefined)    r.responsible = r.owner;
     if (r.target_date === undefined && r.timeline !== undefined) r.target_date = r.timeline;
     if (r.designation === undefined) r.designation = '';
+    /* Rows predating the status field are open by definition - nothing had
+       been marked complete when they were written. */
+    if (r.status !== 'Done') r.status = 'Open';
     delete r.owner; delete r.timeline;
   });
   return o;
@@ -1217,7 +1237,7 @@ function renderObsForm(){
 
   renderImplRows();
   $('#btnAddImpl').addEventListener('click', ()=>{
-    (o.implementation ||= []).push({responsible:'', designation:'', action_plan:'', target_date:''});
+    (o.implementation ||= []).push({responsible:'', designation:'', action_plan:'', target_date:'', status:'Open'});
     renderImplRows(); touch();
   });
 }
@@ -1231,8 +1251,16 @@ function renderImplRows(){
     return;
   }
   host.innerHTML = o.implementation.map((r,i)=>`
-    <div class="implrow" data-i="${i}">
-      <div class="implhead"><span>Row ${i+1}</span><button class="btn sm dgr" data-rm="${i}">Remove</button></div>
+    <div class="implrow ${r.status==='Done'?'done':''}" data-i="${i}">
+      <div class="implhead">
+        <div class="hleft"><span>Row ${i+1}</span>
+          <div class="stog" data-st="${i}">
+            <button type="button" data-v="Open" class="${r.status!=='Done'?'on':''}">Open</button>
+            <button type="button" data-v="Done" class="${r.status==='Done'?'on':''}">Done</button>
+          </div>
+        </div>
+        <button class="btn sm dgr" data-rm="${i}">Remove</button>
+      </div>
       <div class="grid3">
         <div class="form-group">
           <label class="form-label">Responsible Persons</label>
@@ -1257,6 +1285,12 @@ function renderImplRows(){
     el.querySelector('[data-rm]').addEventListener('click', ()=>{
       o.implementation.splice(i,1); renderImplRows(); S.dirty=true; queueSave();
     });
+    el.querySelectorAll('[data-st] button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        o.implementation[i].status = b.dataset.v;
+        renderImplRows(); S.dirty=true; queueSave();
+      });
+    });
     /* Typed fields save on input; only the date re-renders, to refresh the
        "Prints as March 31, 2024" hint underneath it. */
     ['responsible','designation'].forEach(f=>{
@@ -1276,6 +1310,10 @@ function renderImplRows(){
 /* The target-date chip shown at the right of an observation row. */
 function dueChip(o){
   const info = dueInfo(o);
+  if (info.done){
+    return `<div class="due done" title="Every implementation row is marked Done">`
+         + `<b>&#10004; Completed</b><span>${info.total} action${info.total===1?'':'s'}</span></div>`;
+  }
   if (info.none){
     /* Only nag about a missing date once an action plan exists - a brand new
        observation has not been discussed with management yet. */
@@ -1284,17 +1322,19 @@ function dueChip(o){
       : `<div class="due none" style="background:transparent;"></div>`;
   }
   const more = info.extra > 0 ? ` (+${info.extra} more)` : '';
+  const shut = info.closed > 0 ? ` · ${info.closed} done` : '';
   return `<div class="due ${info.cls}" title="Earliest target date across ${info.extra+1} implementation row(s)">`
-       + `<b>${esc(shortDate(info.iso))}</b><span>${esc(info.label)}${more}</span></div>`;
+       + `<b>${esc(shortDate(info.iso))}</b><span>${esc(info.label)}${more}${shut}</span></div>`;
 }
 /* Roll-up next to the Observations heading, so the state of the whole audit
    reads at a glance rather than row by row. */
 function renderDueSummary(){
   const host = $('#dueSummary');
   if (!host) return;
-  let over=0, soon=0, missing=0;
+  let over=0, soon=0, missing=0, done=0;
   S.obs.forEach(o=>{
     const i = dueInfo(o);
+    if (i.done){ done++; return; }
     if (i.none){ if (i.hasRows) missing++; return; }
     if (i.d < 0) over++; else if (i.d <= 7) soon++;
   });
@@ -1302,6 +1342,7 @@ function renderDueSummary(){
   if (over)    bits.push(`<span class="over">${over} overdue</span>`);
   if (soon)    bits.push(`<span class="soon">${soon} due within 7 days</span>`);
   if (missing) bits.push(`<span class="none">${missing} with no target date</span>`);
+  if (done)    bits.push(`<span class="done">${done} completed</span>`);
   host.innerHTML = bits.join('');
 }
 

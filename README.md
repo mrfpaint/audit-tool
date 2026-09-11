@@ -37,6 +37,7 @@ is left:
 | orange | due within 7 days, or today |
 | yellow | due within 30 days |
 | green | more than 30 days out |
+| green ✔ Completed | every implementation row is marked Done |
 | grey | an implementation row exists but no target date was set |
 
 An observation with several responsible people shows the **soonest** date, since
@@ -44,6 +45,17 @@ that is the one that decides whether the observation is late; the chip notes
 `(+1 more)` when others follow. An observation with no implementation rows at
 all shows nothing — the action plan has not been agreed yet, so there is
 nothing to be late for.
+
+Each implementation row carries an **Open / Done** toggle in its header. A row
+marked Done is dimmed in the editor and drops out of the urgency calculation,
+so a commitment met last month stops nagging; the chip then reflects the
+soonest *remaining* open row and notes how many are `· 2 done`. When every row
+is Done the observation shows **✔ Completed** instead of a date. Closing a row
+does not lock it — the fields stay editable, and the toggle flips back.
+
+The status is tracking state, not part of the report: it is **not printed**.
+The PDF is the draft report issued to management, and the sample format has no
+status column. Say so if you would rather it appeared there.
 
 A roll-up beside the **Observations** heading counts what needs attention:
 `1 overdue · 2 due within 7 days · 1 with no target date`.
@@ -66,7 +78,7 @@ lands:
 - **Recommendation(s)** — text, plus ticks for People / Process / Technology
 - **Management Response(s)** — rich text
 - **Implementation** — one or more rows of Responsible Persons / Designation /
-  Action Plan / Target Date
+  Action Plan / Target Date, each marked **Open** or **Done**
 - **Upload File** — the filenames of your supporting evidence
 
 Every rich-text box supports **bold, italic, underline, bullet lists, numbered

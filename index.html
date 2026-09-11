@@ -98,6 +98,10 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .acode{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:#fff;background:var(--dark);border-radius:8px;min-width:44px;height:38px;display:flex;align-items:center;justify-content:center;padding:0 8px;}
 .amain{flex:1;min-width:0;}
 .aname{font-weight:600;font-size:14.5px;color:var(--dark);}
+/* The report number is what tells two audits of the same depot apart, so it
+   leads the row rather than sitting in the detail line. */
+.rno{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--red);margin-right:8px;}
+.rno.missing{color:var(--gray);font-style:italic;font-weight:600;font-size:13px;}
 .ameta{font-size:12px;color:var(--gray);margin-top:2px;}
 .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px;}
 .pill.draft{background:#fef3c7;color:#92400e;} .pill.final{background:#d1fae5;color:#065f46;}
@@ -360,7 +364,7 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
     <div class="pagehead">
       <div><div class="pagetitle">Audits</div><div class="pagesub" id="listSub"></div></div>
       <div class="toolbar">
-        <input class="form-input" id="listSearch" placeholder="Search code, location or area…" style="width:250px;">
+        <input class="form-input" id="listSearch" placeholder="Search report no., code, location…" style="width:250px;">
         <button class="btn pri" id="btnNewAudit">+ New audit</button>
       </div>
     </div>
@@ -747,7 +751,7 @@ const S = { audits:[], audit:null, obs:[], ob:null, dirty:false };
 
 /* Blank records — the shape of an audit and of an observation. */
 function newAudit(){
-  return { id:uid(), depot_code:'', location:'', region:'', period_from:'', period_to:'',
+  return { id:uid(), report_no:'', depot_code:'', location:'', region:'', period_from:'', period_to:'',
            status:'Draft', audit_team:'', created_at:new Date().toISOString(), updated_at:'' };
 }
 function newObs(auditId, seq){
@@ -762,7 +766,9 @@ function newObs(auditId, seq){
 }
 /* The footer line, e.g. "Draft Report - 58_Nalagarh_Administration Control". */
 function footerText(a){
-  const parts = [a.depot_code, a.location, a.region].filter(Boolean).join('_');
+  /* Report number leads: a depot is audited more than once, so the depot
+     segments alone cannot identify which report a page belongs to. */
+  const parts = [a.report_no, a.depot_code, a.location, a.region].filter(Boolean).join('_');
   return `${a.status||'Draft'} Report - ${parts}`;
 }
 
@@ -990,7 +996,7 @@ $('#listSearch').addEventListener('input', renderList);
 function renderList(){
   const q = $('#listSearch').value.trim().toLowerCase();
   const rows = S.audits
-    .filter(a => !q || [a.depot_code,a.location,a.region].join(' ').toLowerCase().includes(q))
+    .filter(a => !q || [a.report_no,a.depot_code,a.location,a.region].join(' ').toLowerCase().includes(q))
     .sort((a,b)=> String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||'')));
 
   $('#listSub').textContent = S.audits.length
@@ -1000,7 +1006,7 @@ function renderList(){
   if (!rows.length){
     $('#listBody').innerHTML = `<div class="empty">
       <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:6px;">${S.audits.length?'No audits match that search':'No audits yet'}</div>
-      <div>${S.audits.length?'Try a different code, location or area.':'Create your first audit to start recording observations.'}</div></div>`;
+      <div>${S.audits.length?'Try a different report number, code, location or region.':'Create your first audit to start recording observations.'}</div></div>`;
     return;
   }
   $('#listBody').innerHTML = rows.map(a=>{
@@ -1008,7 +1014,10 @@ function renderList(){
     return `<div class="arow" data-id="${esc(a.id)}">
       <div class="acode">${esc(a.depot_code||'—')}</div>
       <div class="amain">
-        <div class="aname">${esc(a.location||'Location not set')} · ${esc(a.region||'Region not set')}</div>
+        <div class="aname">${a.report_no
+            ? `<span class="rno">${esc(a.report_no)}</span>`
+            : `<span class="rno missing">no report no.</span>`
+          }${esc(a.location||'Location not set')} · ${esc(a.region||'Region not set')}</div>
         <div class="ameta">${esc(period)} &nbsp;·&nbsp; ${esc(footerText(a))}</div>
       </div>
       <span class="pill ${a.status==='Final'?'final':'draft'}">${esc(a.status||'Draft')}</span>
@@ -1032,8 +1041,8 @@ async function openAudit(id){
 }
 function renderAudit(){
   const a = S.audit;
-  $('#auTitle').textContent = `${a.depot_code||'—'} · ${a.location||'Location not set'}`;
-  $('#auSub').innerHTML = `${esc(a.region||'Region not set')} &nbsp;·&nbsp; ${esc(a.period_from||'?')} → ${esc(a.period_to||'?')}
+  $('#auTitle').textContent = `${a.report_no||'(no report no.)'} · ${a.location||'Location not set'}`;
+  $('#auSub').innerHTML = `${esc(a.depot_code||'—')} · ${esc(a.region||'Region not set')} &nbsp;·&nbsp; ${esc(a.period_from||'?')} → ${esc(a.period_to||'?')}
     &nbsp;·&nbsp; <span class="pill ${a.status==='Final'?'final':'draft'}">${esc(a.status||'Draft')}</span>`;
 
   if (!S.obs.length){
@@ -1504,6 +1513,10 @@ $('#modalOk').addEventListener('click', async ()=>{ if (M.ok) await M.ok(); });
 
 function auditFormHTML(a){
   return `
+  <div class="form-group"><label class="form-label" for="m_report_no">Report Number <span style="color:var(--red)">*</span></label>
+    <input class="form-input" id="m_report_no" value="${esc(a.report_no||'')}" placeholder="2026-001">
+    <div class="hint">Identifies this report. A depot is audited more than once, so this is what tells two Rajkot reports apart.</div></div>
+  <div id="m_dupe"></div>
   <div class="fsec">Depot Details</div>
   <div class="grid3">
     <div class="form-group"><label class="form-label" for="m_depot_code">Depot Code <span style="color:var(--red)">*</span></label>
@@ -1534,17 +1547,27 @@ function auditFormHTML(a){
 }
 function wireAuditForm(a){
   const upd = ()=>{
+    const no = $('#m_report_no').value.trim();
     $('#m_foot').textContent = footerText({
+      report_no: no,
       depot_code: $('#m_depot_code').value.trim(), location: $('#m_location').value.trim(),
       region: $('#m_region').value.trim(), status: $('#m_status').value
     });
+    /* Numbers are typed by hand, so nothing stops two audits sharing one.
+       Warn rather than block: re-issuing a revised report under the same
+       number is a legitimate thing to want. */
+    const clash = no && S.audits.some(x => x.id !== a.id && (x.report_no||'').trim() === no);
+    $('#m_dupe').innerHTML = clash
+      ? `<div class="err" style="background:#fffbeb;border-color:#fde68a;color:#92400e;">Report number <b>${esc(no)}</b> is already used by another audit.</div>`
+      : '';
   };
-  ['#m_depot_code','#m_location','#m_region','#m_status'].forEach(s=>{
+  ['#m_report_no','#m_depot_code','#m_location','#m_region','#m_status'].forEach(s=>{
     $(s).addEventListener('input', upd); $(s).addEventListener('change', upd);
   });
   upd();
 }
 function readAuditForm(a){
+  a.report_no = $('#m_report_no').value.trim();
   a.depot_code = $('#m_depot_code').value.trim();
   a.location = $('#m_location').value.trim();
   a.region = $('#m_region').value.trim();
@@ -1552,8 +1575,8 @@ function readAuditForm(a){
   a.period_to = $('#m_to').value;
   a.status = $('#m_status').value;
   a.audit_team = $('#m_team').value.trim();
-  if (!a.depot_code || !a.location || !a.region){
-    $('#m_err').innerHTML = '<div class="err">Depot Code, Location and Region are all required — together they make up the report footer.</div>';
+  if (!a.report_no || !a.depot_code || !a.location || !a.region){
+    $('#m_err').innerHTML = '<div class="err">Report Number, Depot Code, Location and Region are all required — together they make up the report footer.</div>';
     return false;
   }
   return true;
@@ -1581,7 +1604,7 @@ $('#btnEditAudit').addEventListener('click', ()=>{
   });
   wireAuditForm(a);
   $('#m_del').addEventListener('click', async ()=>{
-    if (!confirm(`Delete audit ${a.depot_code} and all ${S.obs.length} observation(s)? This cannot be undone.`)) return;
+    if (!confirm(`Delete audit ${a.report_no||a.depot_code} and all ${S.obs.length} observation(s)? This cannot be undone.`)) return;
     try { await Store.deleteAudit(a.id); } catch(e){ flag('Could not delete: '+e.message,'bad'); return; }
     S.audits = S.audits.filter(x=>x.id!==a.id);
     closeModal(); loadList();

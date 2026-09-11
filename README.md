@@ -14,16 +14,22 @@ One screen per job:
 
 | Screen | Purpose |
 |---|---|
-| Audits | every audit, searchable by depot code / location / region, each with a Draft or Final badge |
+| Audits | every audit, searchable by report number / depot code / location / region, each with a Draft or Final badge |
 | Audit workspace | the observations in one audit — reorder, add, delete, preview, export, and see what is running late |
 | Observation editor | all report fields, laid out in the same order they print |
 | Report preview | the finished report at true A4 width, then **Export PDF** |
 
-An audit is identified by its **Depot Details** — **Depot Code + Location +
-Region**, all typed free-text — which is also what the report footer is built
-from: `58` + `Nalagarh` + `North` prints as `Draft Report - 58_Nalagarh_North`.
+An audit is identified by a typed **Report Number** plus its **Depot Details**
+— Depot Code, Location and Region. All four are free text and all four are
+required, because together they build the report footer: `2026-001` + `9340` +
+`Rajkot` + `West 2` prints as `Draft Report - 2026-001_9340_Rajkot_West 2`.
 Switching the audit's status to Final changes the footer to `Final Report - …`.
 A segment left blank is dropped rather than leaving a stray underscore.
+
+The report number leads because a depot is audited more than once — the depot
+segments alone cannot say which report a page belongs to. Numbers are typed,
+not generated, so the tool warns when one is already in use but does not block
+it: re-issuing a revised report under the same number is legitimate.
 
 ## Target dates and urgency
 
@@ -193,7 +199,7 @@ by accident.
 
 Three tabs, created automatically on first use:
 
-- **Audits** — one row per audit
+- **Audits** — one row per audit. `report_no` is the **last** column, not the second: rows are addressed positionally, so inserting it among the existing columns would have shifted every stored audit one place
 - **Observations** — one row per observation; the rich-text sections are stored as
   HTML in single cells, tick selections as pipe-separated lists, implementation
   rows as JSON

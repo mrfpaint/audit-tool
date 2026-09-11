@@ -16,6 +16,7 @@ One screen per job:
 |---|---|
 | Audits | every audit, searchable by report number / depot code / location / region, each with a Draft or Final badge |
 | Audit workspace | the observations in one audit — reorder, add, delete, preview, export, and see what is running late |
+| Cover page | free-form text printed as page 1, ahead of the first observation |
 | Observation editor | all report fields, laid out in the same order they print |
 | Report preview | the finished report at true A4 width, then **Export PDF** |
 
@@ -69,6 +70,30 @@ A roll-up beside the **Observations** heading counts what needs attention:
 Days are counted from local midnight to local midnight, so the number does not
 drift with the time of day, and a malformed date in the sheet is ignored rather
 than rendered as urgent.
+
+## The cover page
+
+**Cover page** in the audit workspace opens a free-text box that prints as the
+first page of the report, ahead of Observation 1. It is deliberately
+unstructured — type whatever the front page should say, with the same bold /
+lists / tables the observation editor offers.
+
+**Insert standard layout** fills the box with a starting point built from the
+audit's own fields, following the layout MRF already uses:
+
+```
+CONFIDENTIAL
+<today's date>
+INTERNAL AUDIT REPORT No. <report number>
+<location> - <region>
+PERIOD OF AUDIT        <period from> to <period to>
+PREVIOUS AUDIT
+Internal Audit Report Distribution
+Process Owners: / Management: / Audit Team:
+```
+
+It is only a suggestion — edit or replace it freely. Leave the box empty and no
+cover page is printed, so reports that do not use one are unchanged.
 
 ## The observation fields
 
@@ -199,7 +224,7 @@ by accident.
 
 Three tabs, created automatically on first use:
 
-- **Audits** — one row per audit. `report_no` is the **last** column, not the second: rows are addressed positionally, so inserting it among the existing columns would have shifted every stored audit one place
+- **Audits** — one row per audit. `report_no` and `cover` are the **last** columns rather than sitting in a natural reading position: rows are addressed positionally, so inserting a column among the existing ones would shift every stored audit one place
 - **Observations** — one row per observation; the rich-text sections are stored as
   HTML in single cells, tick selections as pipe-separated lists, implementation
   rows as JSON

@@ -207,6 +207,7 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:300;padding:18px;overflow-y:auto;}
 .modal.on{display:flex;}
 .modalbox{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:92vh;overflow-y:auto;}
+.modalbox.wide{max-width:780px;}   /* the cover-page editor needs room */
 .modaltitle{font-family:'Rajdhani',sans-serif;font-size:21px;font-weight:700;color:var(--dark);margin-bottom:16px;}
 /* Sub-heading that groups related fields inside a modal (e.g. Depot Details). */
 .fsec{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--dark);border-bottom:2px solid var(--gold);padding-bottom:5px;margin:2px 0 14px;letter-spacing:.3px;}
@@ -228,6 +229,14 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
 .preview-on #printroot{display:block;background:#fff;width:595pt;margin:0 auto 40px;padding:32.4pt 34.7pt 27.5pt 34.5pt;box-shadow:0 6px 30px rgba(0,0,0,.18);}
 .preview-on .wrap{padding-bottom:20px;}
 
+/* COVER PAGE - free-form text the auditor types, printed ahead of the first
+   observation. Set larger than body copy because it carries titles rather than
+   paragraphs. It needs no break-after of its own: the first .pobs stops being
+   :first-child once a cover exists, so that section's break-before starts
+   page 2. A second rule here would risk an empty sheet between them. */
+.pcover{font-size:12pt;line-height:1.5;}
+.pcover p{margin:7pt 0;}
+.pcover table.dt{font-size:11pt;}
 /* The report is always Arial at 9.6pt — matching wkhtmltopdf's output. */
 #printroot{font-family:Arial,Helvetica,sans-serif;font-size:9.6pt;color:#000;line-height:1.32;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -383,6 +392,7 @@ body{font-family:'DM Sans',sans-serif;background:#f8f9fc;color:#1f2937;min-heigh
       <div class="toolbar">
         <button class="btn" id="btnBackList">&larr; All audits</button>
         <button class="btn" id="btnEditAudit">Audit details</button>
+        <button class="btn" id="btnCover">Cover page</button>
         <button class="btn gold" id="btnPreview">Preview report</button>
         <button class="btn pri" id="btnPrint">Export PDF</button>
       </div>
@@ -751,7 +761,7 @@ const S = { audits:[], audit:null, obs:[], ob:null, dirty:false };
 
 /* Blank records — the shape of an audit and of an observation. */
 function newAudit(){
-  return { id:uid(), report_no:'', depot_code:'', location:'', region:'', period_from:'', period_to:'',
+  return { id:uid(), report_no:'', depot_code:'', location:'', region:'', cover:'', period_from:'', period_to:'',
            status:'Draft', audit_team:'', created_at:new Date().toISOString(), updated_at:'' };
 }
 function newObs(auditId, seq){
@@ -1415,7 +1425,10 @@ window.addEventListener('beforeunload', e=>{ if (S.dirty){ e.preventDefault(); e
    every sheet.
    ========================================================================== */
 function buildReport(audit, obs){
-  const body = obs.map((o,i)=> reportObs(audit, o, i+1)).join('');
+  /* An empty cover prints nothing at all, so reports that do not use one look
+     exactly as they did before. */
+  const cover = blank(audit.cover) ? '' : `<section class="pcover">${audit.cover}</section>`;
+  const body = cover + obs.map((o,i)=> reportObs(audit, o, i+1)).join('');
   /* The <tfoot> is what makes the footer repeat on every printed page — see
      the .pwrap comment in the stylesheet. */
   return `<table class="pwrap">`
@@ -1506,10 +1519,54 @@ function openModal(title, bodyHTML, onOk, okLabel){
   M.ok = onOk;
   $('#modal').classList.add('on');
 }
-function closeModal(){ $('#modal').classList.remove('on'); M.ok = null; }
+function closeModal(){
+  $('#modal').classList.remove('on');
+  $('.modalbox').classList.remove('wide');
+  M.ok = null;
+}
 $('#modalCancel').addEventListener('click', closeModal);
 $('#modal').addEventListener('click', e=>{ if (e.target.id === 'modal') closeModal(); });
 $('#modalOk').addEventListener('click', async ()=>{ if (M.ok) await M.ok(); });
+
+/* A starting point for the cover page, built from what the audit already
+   knows. Only a suggestion - the box is free text and this can be typed over
+   or replaced entirely. */
+function coverTemplate(a){
+  const period = (a.period_from || a.period_to)
+    ? `${longDate(a.period_from) || '?'} to ${longDate(a.period_to) || '?'}` : '';
+  const today = new Date();
+  const iso = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0')
+            + '-' + String(today.getDate()).padStart(2,'0');
+  const gap = '<p><br></p>';
+  return `<p><b>CONFIDENTIAL</b></p>${gap}`
+    + `<p><b>${esc(longDate(iso))}</b></p>${gap}`
+    + `<p><b>INTERNAL AUDIT REPORT No. ${esc(a.report_no||'')}</b></p>`
+    + `<p><b>${esc([a.location, a.region].filter(Boolean).join(' - '))}</b></p>${gap}`
+    + `<p><b>PERIOD OF AUDIT</b></p><p>${esc(period)}</p>${gap}`
+    + `<p><b>PREVIOUS AUDIT</b></p><p><br></p>${gap}`
+    + `<p><b>Internal Audit Report Distribution</b></p>`
+    + `<p>Process Owners:</p><p>Management:</p><p>Audit Team:</p>`;
+}
+$('#btnCover').addEventListener('click', ()=>{
+  const a = S.audit;
+  openModal('Cover page', `
+    <div class="hint" style="margin-bottom:12px;">Free text — type whatever the front page should say. It prints ahead of Observation 1, and an empty box prints no cover page at all.</div>
+    <div style="margin-bottom:10px;"><button type="button" class="btn sm" id="m_tpl">Insert standard layout</button></div>
+    ${rteHTML('m_cover','Type the cover page…', a.cover||'')}
+    <div id="m_err" style="margin-top:12px;"></div>`, async ()=>{
+    a.cover = sanitize($('#m_cover').innerHTML);
+    try { await Store.saveAudit(a); }
+    catch(e){ $('#m_err').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; return; }
+    closeModal(); flag('Cover page saved','ok');
+  }, 'Save cover page');
+  $('.modalbox').classList.add('wide');
+  rteInit('m_cover');
+  $('#m_tpl').addEventListener('click', ()=>{
+    const ed = $('#m_cover');
+    if (!blank(ed.innerHTML) && !confirm('Replace what is already in the cover page?')) return;
+    ed.innerHTML = coverTemplate(a);
+  });
+});
 
 function auditFormHTML(a){
   return `

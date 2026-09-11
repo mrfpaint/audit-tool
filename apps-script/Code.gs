@@ -20,7 +20,7 @@
    way to tell from outside whether a redeploy actually took effect — the
    /exec URL is pinned to a deployment version, so editing the code here and
    pressing Save changes nothing until a NEW VERSION is deployed. */
-var VERSION = 5;
+var VERSION = 6;
 
 /* Appended, not inserted. Rows are addressed by position, so slotting a new
    column in ahead of the existing ones would shift every audit already in
@@ -28,7 +28,7 @@ var VERSION = 5;
    the report number and updated_at would drop off the end. Column order in
    the sheet is cosmetic; only this array's order matters. */
 var AUDIT_COLS = ['id','depot_code','location','region','period_from','period_to',
-                  'status','audit_team','created_at','updated_at','report_no'];
+                  'status','audit_team','created_at','updated_at','report_no','cover'];
 
 var OBS_COLS = ['id','audit_id','seq','title','repeat','value_at_risk','risk_rating',
                 'system_improvement','background','observation',

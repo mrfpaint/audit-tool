@@ -133,6 +133,7 @@ curl -X POST https://<your-worker>.workers.dev/api \
 | `Sheet bridge returned a non-JSON response` | Apps Script returned its HTML error page — re-deploy as a **New version**, and check `BRIDGE_TOKEN` matches on both sides |
 | `Origin not allowed` | the serving origin is missing from `ALLOWED_ORIGINS` in `wrangler.toml` |
 | `Session expired` right after signing in | `TOKEN_SECRET` changed between deploys, or the Worker has no `TOKEN_SECRET` set |
+| Audit list looks empty | the sign-in expired — the app now returns you to the sign-in screen and says so. Data is never deleted by an expired session; sign in again |
 | `Could not reach the Sheet bridge` | `SHEET_ENDPOINT` is wrong, or the deployment was deleted |
 | Chrome's own date/URL printed on each page | **Headers and footers** is on in the print dialog |
 | Report footer appears only once | printed from Firefox or Safari — use Chrome or Edge |

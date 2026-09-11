@@ -692,6 +692,14 @@ const Store = {
       body: JSON.stringify(Object.assign({action}, payload||{}))
     });
     const j = await r.json().catch(()=>({error:'Bad response from server'}));
+    if (r.status === 401){
+      /* Tagged so callers can send the user back to sign in. Sessions last 8
+         hours; before this, an expired one surfaced as an empty audit list -
+         indistinguishable from having no data at all. */
+      const err = new Error(j.error || 'Session expired — please sign in again.');
+      err.auth = true;
+      throw err;
+    }
     if (!r.ok || j.error) throw new Error(j.error || ('HTTP '+r.status));
     return j;
   },
@@ -772,7 +780,7 @@ const Store = {
 /* ==========================================================================
    APP STATE
    ========================================================================== */
-const S = { audits:[], audit:null, obs:[], ob:null, dirty:false };
+const S = { audits:[], audit:null, obs:[], ob:null, dirty:false, loadError:null };
 
 /* Blank records — the shape of an audit and of an observation. */
 function newAudit(){
@@ -999,6 +1007,22 @@ $('#btnOut').addEventListener('click', ()=>{
   location.reload();
 });
 
+/* An expired or rejected session drops the user back to sign-in with the
+   reason shown, rather than leaving them on a screen that looks signed in but
+   has no data. Returns true when it handled the error. */
+function handleAuthFailure(e){
+  if (!e || !e.auth) return false;
+  ss('auditTool.token', null);
+  ss('auditTool.local', null);
+  Store.token = null;
+  S.audits = []; S.audit = null; S.obs = []; S.ob = null; S.dirty = false;
+  $('#appHeader').style.display = 'none';
+  $('#authErr').innerHTML = '<div class="err">'+esc(e.message)+'</div>';
+  $('#pw').value = '';
+  show('scr-auth');
+  return true;
+}
+
 /* After a successful sign-in: load picklists + the audit list. */
 async function boot(){
   $('#appHeader').style.display = 'flex';
@@ -1012,8 +1036,15 @@ async function boot(){
    SCREEN: AUDIT LIST
    ========================================================================== */
 async function loadList(){
-  try { S.audits = await Store.listAudits(); }
-  catch(e){ S.audits = []; flag('Could not load audits: '+e.message, 'bad'); }
+  S.loadError = null;
+  try {
+    S.audits = await Store.listAudits();
+  } catch(e){
+    if (handleAuthFailure(e)) return;
+    /* Keep whatever was already loaded and record why the refresh failed -
+       blanking the list here is what made a failed read look like data loss. */
+    S.loadError = e.message;
+  }
   renderList();
   show('scr-list');
 }
@@ -1028,6 +1059,15 @@ function renderList(){
     ? `${S.audits.length} audit${S.audits.length===1?'':'s'} · ${CFG.ORG}`
     : CFG.ORG;
 
+  if (S.loadError){
+    $('#listBody').innerHTML = `<div class="empty" style="border-color:#fecaca;background:#fef2f2;">
+      <div style="font-size:15px;font-weight:600;color:#b91c1c;margin-bottom:6px;">Could not load your audits</div>
+      <div style="color:#7f1d1d;">${esc(S.loadError)}</div>
+      <div style="margin-top:6px;color:#7f1d1d;">Your audits are stored on the server and are not affected — this is a problem reaching them.</div>
+      <div style="margin-top:14px;"><button class="btn pri" id="btnRetryList">Try again</button></div></div>`;
+    $('#btnRetryList').addEventListener('click', loadList);
+    return;
+  }
   if (!rows.length){
     $('#listBody').innerHTML = `<div class="empty">
       <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:6px;">${S.audits.length?'No audits match that search':'No audits yet'}</div>
@@ -1060,7 +1100,11 @@ async function openAudit(id){
   S.audit = S.audits.find(a=>a.id===id);
   if (!S.audit) return;
   try { S.obs = await Store.listObs(id); }
-  catch(e){ S.obs = []; flag('Could not load observations: '+e.message,'bad'); }
+  catch(e){
+    if (handleAuthFailure(e)) return;
+    flag('Could not load observations: '+e.message,'bad');
+    return;                      // do not open an audit we could not read
+  }
   renderAudit();
   show('scr-audit');
 }
@@ -1403,6 +1447,7 @@ function saveObsNow(){
       flag('Saved', 'ok');
     } catch(e){
       S.dirty = true;            // keep it dirty so the next flush retries
+      if (handleAuthFailure(e)) return;
       flag('Not saved: '+e.message, 'bad');
     }
   });
